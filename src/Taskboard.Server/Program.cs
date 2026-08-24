@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Taskboard;
+using Taskboard.Application.AiChat;
+using Taskboard.Application.Contracts.AiChat;
 using Taskboard.Domain.Entities;
 using Taskboard.Domain.Events;
 using Taskboard.Dtos;
@@ -57,6 +59,11 @@ builder.Services.AddSingleton<WorkflowCapabilityService>();
 builder.Services.AddSingleton<IJiraService, JiraService>();
 builder.Services.AddSingleton<IExecutableResolver, CodexExecutableResolver>();
 builder.Services.AddSingleton<IProcessTreeSignaler, ProcessTreeSignaler>();
+
+// AI Chat services
+builder.Services.AddSingleton<ILLMProvider, MockLLMProvider>();
+builder.Services.AddScoped<AiChatService>();
+
 builder.Services.AddHttpClient<JiraService>();
 
 builder.Services.AddHttpClient<TaskboardClient>(client =>
@@ -187,47 +194,19 @@ api.MapPost("/local/ai/catalog", (AiChatModelDto model, AiCatalogService catalog
 api.MapGet("/local/ai/composer/candidates", () => Results.Ok(new { candidates = Array.Empty<object>() }));
 api.MapPost("/local/ai/composer/rebind", (object? _) => Results.NoContent());
 
-api.MapGet("/local/ai/threads", async (IRepository<AiChatThread> threadRepo, CancellationToken ct) =>
+api.MapGet("/local/ai/threads", async (AiChatService aiChatService, CancellationToken ct) =>
 {
-    var threads = await threadRepo.ListAsync(ct);
-    return Results.Ok(new { threads = threads.Select(t => t.ToDto()) });
+    var threads = await aiChatService.ListThreadsAsync(ct);
+    return Results.Ok(new { threads });
 });
 
 api.MapPost("/local/ai/threads", async (
     CreateAiChatThreadRequest request,
-    AiCatalogService catalog,
-    IRepository<Project> projectRepo,
-    IRepository<AiChatThread> threadRepo,
+    AiChatService aiChatService,
     CancellationToken ct) =>
 {
-    if (!catalog.Contains(request.Model))
-    {
-        return Results.BadRequest(new { error = new { code = "MODEL_NOT_IN_CATALOG", message = $"Model '{request.Model}' is not in the catalog." } });
-    }
-
-    ProjectId? originProjectId = null;
-    if (!string.IsNullOrWhiteSpace(request.OriginProjectId))
-    {
-        originProjectId = ProjectId.From(request.OriginProjectId);
-        var project = await projectRepo.GetAsync(originProjectId, ct);
-        if (project is null)
-        {
-            return Results.NotFound(new { error = new { code = "PROJECT_NOT_FOUND", message = $"Project '{request.OriginProjectId}' not found." } });
-        }
-    }
-
-    var thread = AiChatThread.Create(
-        AiChatThreadId.NewGuid(),
-        request.Title,
-        originProjectId,
-        ModelRef.From(request.Model),
-        request.ReasoningEffort,
-        Sandbox.From(request.Sandbox));
-
-    await threadRepo.AddAsync(thread, ct);
-    await threadRepo.SaveChangesAsync(ct);
-
-    return Results.Created($"/api/local/ai/threads/{thread.Id.Value}", new { thread = thread.ToDto() });
+    var thread = await aiChatService.CreateThreadAsync(request, Actor.LocalUser(), ct);
+    return Results.Created($"/api/local/ai/threads/{thread.Id}", new { thread });
 });
 
 api.MapGet("/local/ai/threads/{id}/events", async (HttpResponse response, string id, IRepository<AiChatEvent> eventRepo, IThreadEventStreamService threadEvents, CancellationToken ct) =>
@@ -257,46 +236,22 @@ api.MapGet("/local/ai/threads/{id}/events", async (HttpResponse response, string
 api.MapPost("/local/ai/threads/{id}/events", async (
     string id,
     AddAiChatEventRequest request,
-    IRepository<AiChatThread> threadRepo,
-    IRepository<AiChatEvent> eventRepo,
-    IThreadEventStreamService threadEvents,
+    AiChatService aiChatService,
     CancellationToken ct) =>
 {
     var threadId = AiChatThreadId.From(id);
-    var thread = await threadRepo.GetAsync(threadId, ct);
-    if (thread is null)
-    {
-        return Results.NotFound(new { error = new { code = "THREAD_NOT_FOUND", message = $"Thread '{id}' not found." } });
-    }
-
-    var role = AiChatEventRole.From(request.Role);
-    var chatEvent = AiChatEvent.Create(AiChatEventId.NewGuid(), threadId, role, request.Content);
-    await eventRepo.AddAsync(chatEvent, ct);
-    await eventRepo.SaveChangesAsync(ct);
-
-    await threadEvents.PublishAsync(id, new ServerSentEvent("ai_chat.event", chatEvent.ToDto()), ct);
-
-    return Results.Created($"/api/local/ai/threads/{id}/events/{chatEvent.Id.Value}", new { aiChatEvent = chatEvent.ToDto() });
+    var chatEvent = await aiChatService.AddEventAsync(threadId, request, Actor.LocalUser(), ct);
+    return Results.Created($"/api/local/ai/threads/{id}/events/{chatEvent.Id}", new { aiChatEvent = chatEvent });
 });
 
 api.MapPost("/local/ai/threads/{id}/runs", async (
     string id,
-    IRepository<AiChatThread> threadRepo,
-    IRepository<AiChatRun> runRepo,
+    AiChatService aiChatService,
     CancellationToken ct) =>
 {
     var threadId = AiChatThreadId.From(id);
-    var thread = await threadRepo.GetAsync(threadId, ct);
-    if (thread is null)
-    {
-        return Results.NotFound(new { error = new { code = "THREAD_NOT_FOUND", message = $"Thread '{id}' not found." } });
-    }
-
-    var run = thread.StartRun();
-    await runRepo.AddAsync(run, ct);
-    await runRepo.SaveChangesAsync(ct);
-
-    return Results.Created($"/api/local/ai/threads/{id}/runs/{run.Id.Value}", new { run = run.ToDto() });
+    var run = await aiChatService.StartRunAsync(threadId, Actor.LocalUser(), ct);
+    return Results.Created($"/api/local/ai/threads/{id}/runs/{run.Id}", new { run });
 });
 
 api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
@@ -339,12 +294,12 @@ api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
 
     return Results.Ok(new { run = run.ToDto(), thread = thread.ToDto() });
 });
+
 api.MapGet("/device-workspaces", async (IRepository<WorkflowWorkspace> workspaceRepo, CancellationToken ct) =>
 {
     var workspaces = await workspaceRepo.ListAsync(ct);
     return Results.Ok(new { workspaces = workspaces.Select(w => w.ToDto()) });
 });
-
 api.MapPut("/device-workspaces", async (
     UpdateDeviceWorkspaceRequest request,
     IRepository<Project> projectRepo,

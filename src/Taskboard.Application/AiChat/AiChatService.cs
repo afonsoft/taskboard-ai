@@ -1,0 +1,231 @@
+using System.Text.Json;
+using Taskboard;
+using Taskboard.Application.Contracts.AiChat;
+using Taskboard.Domain.Entities;
+using Taskboard.Domain.Events;
+using Taskboard.Repositories;
+using Taskboard.ValueObjects;
+
+namespace Taskboard.Application.AiChat;
+
+public sealed class AiChatService
+{
+    private readonly IRepository<AiChatThread> _threadRepo;
+    private readonly IRepository<AiChatRun> _runRepo;
+    private readonly IRepository<AiChatEvent> _eventRepo;
+    private readonly IRepository<Project> _projectRepo;
+    private readonly ILLMProvider _llmProvider;
+    private readonly IThreadEventStreamService _threadEvents;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public AiChatService(
+        IRepository<AiChatThread> threadRepo,
+        IRepository<AiChatRun> runRepo,
+        IRepository<AiChatEvent> eventRepo,
+        IRepository<Project> projectRepo,
+        ILLMProvider llmProvider,
+        IThreadEventStreamService threadEvents,
+        IUnitOfWork unitOfWork)
+    {
+        _threadRepo = threadRepo;
+        _runRepo = runRepo;
+        _eventRepo = eventRepo;
+        _projectRepo = projectRepo;
+        _llmProvider = llmProvider;
+        _threadEvents = threadEvents;
+        _unitOfWork = unitOfWork;
+    }
+
+    public async Task<AiChatThreadDto> CreateThreadAsync(
+        CreateAiChatThreadRequest request,
+        Actor actor,
+        CancellationToken ct = default)
+    {
+        var project = request.OriginProjectId != null
+            ? await _projectRepo.GetAsync(ProjectId.From(request.OriginProjectId), ct)
+            : null;
+
+        if (request.OriginProjectId != null && project is null)
+        {
+            throw new DomainException(TaskboardDomainErrorCodes.ProjectNotFound, $"Project '{request.OriginProjectId}' not found.");
+        }
+
+        var thread = AiChatThread.Create(
+            AiChatThreadId.NewGuid(),
+            request.Title,
+            project?.Id,
+            ModelRef.From(request.Model),
+            request.ReasoningEffort,
+            Sandbox.From(request.Sandbox));
+
+        await _threadRepo.AddAsync(thread, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        return thread.ToDto();
+    }
+
+    public async Task<AiChatThreadDto?> GetThreadAsync(AiChatThreadId id, CancellationToken ct = default)
+    {
+        var thread = await _threadRepo.GetAsync(id, ct);
+        return thread?.ToDto();
+    }
+
+    public async Task<IReadOnlyList<AiChatThreadDto>> ListThreadsAsync(CancellationToken ct = default)
+    {
+        var threads = await _threadRepo.ListAsync(ct);
+        return threads.Select(t => t.ToDto()).ToList().AsReadOnly();
+    }
+
+    public async Task<AiChatRunDto> StartRunAsync(
+        AiChatThreadId threadId,
+        Actor actor,
+        CancellationToken ct = default)
+    {
+        var thread = await _threadRepo.GetAsync(threadId, ct);
+        if (thread is null)
+        {
+            throw new DomainException(TaskboardDomainErrorCodes.TaskNotFound, $"Thread '{threadId.Value}' not found.");
+        }
+
+        var run = thread.StartRun();
+        await _runRepo.AddAsync(run, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        // Start the AI run asynchronously
+        _ = Task.Run(() => ExecuteRunAsync(thread.Id, run.Id, ct));
+
+        return run.ToDto();
+    }
+
+    private async Task ExecuteRunAsync(AiChatThreadId threadId, AiChatRunId runId, CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _unitOfWork.BeginScope();
+            var run = await _runRepo.GetAsync(runId, ct);
+            var thread = await _threadRepo.GetAsync(threadId, ct);
+            
+            if (run is null || thread is null) return;
+
+            // Get conversation history
+            var events = await _eventRepo.Query
+                .Where(e => e.ThreadId == threadId)
+                .OrderBy(e => e.CreatedAt)
+                .ToListAsync(ct);
+
+            var messages = new List<LLMMessage>
+            {
+                new("system", $"You are an AI assistant in sandbox mode: {thread.Sandbox.Value}.")
+            };
+
+            foreach (var ev in events)
+            {
+                messages.Add(new LLMMessage(
+                    ev.Role.Value switch
+                    {
+                        "user" => "user",
+                        "assistant" => "assistant",
+                        _ => "system"
+                    },
+                    ev.Content));
+            }
+
+            // Add a user prompt to continue the conversation
+            messages.Add(new LLMMessage("user", "Continue the conversation."));
+
+            await foreach (var chunk in _llmProvider.StreamAsync(messages, cancellationToken: ct))
+            {
+                if (chunk.IsComplete)
+                {
+                    run.Complete(chunk.Usage?.TotalTokens ?? 0);
+                    break;
+                }
+                
+                if (!string.IsNullOrEmpty(chunk.ContentDelta))
+                {
+                    var chatEvent = AiChatEvent.Create(
+                        AiChatEventId.NewGuid(),
+                        threadId,
+                        AiChatEventRole.Assistant,
+                        chunk.ContentDelta);
+                    
+                    thread.AddEvent(chatEvent);
+                    await _eventRepo.AddAsync(chatEvent, ct);
+                    
+                    await _threadEvents.PublishAsync(
+                        threadId.Value,
+                        new ServerSentEvent("ai_chat.event", chatEvent.ToDto()),
+                        ct);
+                }
+            }
+
+            thread.SetStatus(AiChatThreadStatus.Idle);
+            await _runRepo.UpdateAsync(run, ct);
+            await _threadRepo.UpdateAsync(thread, ct);
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+        catch (Exception)
+        {
+            using var scope = _unitOfWork.BeginScope();
+            var run = await _runRepo.GetAsync(runId, ct);
+            var thread = await _threadRepo.GetAsync(threadId, ct);
+            
+            if (run != null)
+            {
+                run.Fail(-1);
+                await _runRepo.UpdateAsync(run, ct);
+            }
+            
+            if (thread != null)
+            {
+                thread.SetStatus(AiChatThreadStatus.Failed);
+                await _threadRepo.UpdateAsync(thread, ct);
+            }
+            
+            await _unitOfWork.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task<AiChatEventDto> AddEventAsync(
+        AiChatThreadId threadId,
+        AddAiChatEventRequest request,
+        Actor actor,
+        CancellationToken ct = default)
+    {
+        var thread = await _threadRepo.GetAsync(threadId, ct);
+        if (thread is null)
+        {
+            throw new DomainException(TaskboardDomainErrorCodes.TaskNotFound, $"Thread '{threadId.Value}' not found.");
+        }
+
+        var role = AiChatEventRole.From(request.Role);
+        var chatEvent = AiChatEvent.Create(
+            AiChatEventId.NewGuid(),
+            threadId,
+            role,
+            request.Content);
+
+        thread.AddEvent(chatEvent);
+        await _eventRepo.AddAsync(chatEvent, ct);
+        await _unitOfWork.SaveChangesAsync(ct);
+
+        await _threadEvents.PublishAsync(
+            threadId.Value,
+            new ServerSentEvent("ai_chat.event", chatEvent.ToDto()),
+            ct);
+
+        return chatEvent.ToDto();
+    }
+
+    public async Task<IReadOnlyList<AiChatEventDto>> GetEventsAsync(
+        AiChatThreadId threadId,
+        CancellationToken ct = default)
+    {
+        var events = await _eventRepo.Query
+            .Where(e => e.ThreadId == threadId)
+            .OrderBy(e => e.CreatedAt)
+            .ToListAsync(ct);
+
+        return events.Select(e => e.ToDto()).ToList().AsReadOnly();
+    }
+}

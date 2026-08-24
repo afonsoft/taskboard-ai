@@ -20,7 +20,7 @@ servidor HTTP customizado, React/Vite, Tauri).
 | ai-chat | Subsystem de chat AI local: threads, runs, eventos SSE por thread, spawn do Codex app-server | rest-api, persistence |
 | cloud | Modo nuvem (companion loopback + proxy Cloudflare D1/R2), Basic Auth, polling de revisão | rest-api, persistence |
 | workflow-automation | Motor de grafo de workflow (control-flow), automação de auto-claim via Codex | domain-model, rest-api |
-| frontend | UI React (Vite) servida estaticamente; consumo da REST API + SSE | rest-api |
+| frontend | UI Blazor (.NET MAUI desktop) reescrita; consome REST API + SSE | rest-api |
 | skill | Skill `manage-taskboard` (markdown + referências) e skill de automação Codex | rest-api, cli |
 | integrations | Jira (connection/sync), DeepSeek harness | rest-api, persistence |
 
@@ -33,15 +33,15 @@ não se referenciam ciclicamente.
 
 ## Assumptions (a confirmar com o usuário)
 
-1. O clone backend roda em **ASP.NET Core 10** (Minimal APIs ou controller-based),
-   usando **SQLite** via **EF Core 10** ou **Microsoft.Data.Sqlite** (escolha a definir).
-2. O servidor **MCP** usa o pacote oficial **ModelContextProtocol for .NET** (`ModelContextProtocol`),
-   transport `Stdio`, espelhando os 13 tools atuais.
-3. **Skills**: a skill `manage-taskboard` permanece em formato markdown (AGENTS/SKILL.md),
-   portada 1:1 em conteúdo; a invocação em .NET fica a cargo do host de agente (OpenCode/Claude/etc.).
-4. **Frontend**: o clone pode reutilizar o app React existente apontando para a nova API,
-   OU reimplementar. Decisão fora do escopo inicial do backend — especificado mas não construído primeiro.
-5. **Cloud**: Cloudflare D1/R2 é opcional no clone; o modo companion local é o alvo MVP.
+1. O clone backend roda em **ASP.NET Core 10** (Minimal APIs), usando **SQLite
+   raw via `Microsoft.Data.Sqlite`** (confirmado — paridade 1:1 das migrações e lock `version`).
+2. O servidor **MCP** usa o pacote oficial **ModelContextProtocol for .NET**, transport
+   `Stdio`, espelhando os 13 tools; `CallTool` **chama a API HTTP direto** (não spawn do CLI).
+3. **Skills**: a skill `manage-taskboard` permanece markdown (SKILL.md) portada 1:1;
+   invocação a cargo do host de agente (OpenCode/Claude/etc.).
+4. **Frontend**: **reescrito em Blazor (.NET MAUI para desktop)** — ver `SPEC-008-frontend.md`.
+   O app React original não é reutilizado (ver `SPEC-008-legacy-react.md`).
+5. **Cloud**: modo companion local loopback é o alvo MVP; Cloudflare D1/R2 é deployment opcional.
 6. Idioma dos docs/specs: **Português** (comunicação) / identificadores e enums mantêm
    os nomes originais em inglês do sistema-fonte para garantir paridade da API.
 
@@ -57,7 +57,8 @@ não se referenciam ciclicamente.
 | SPEC-005-ai-chat.md | ai-chat | Threads, runs, eventos, Codex app-server |
 | SPEC-006-cloud.md | cloud | Companion, proxy, Basic Auth, polling |
 | SPEC-007-workflow-automation.md | workflow-automation | Grafo, condition branches, automação |
-| SPEC-008-frontend.md | frontend | Estrutura React, stores, SSE client |
+| SPEC-008-frontend.md | frontend | Reescrita Blazor / .NET MAUI (desktop) |
+| SPEC-008-legacy-react.md | frontend (ref) | App React original (não reutilizado) |
 | SPEC-009-skill.md | skill | manage-taskboard, automação, fluxo |
 | SPEC-010-integrations.md | integrations | Jira, DeepSeek |
 

@@ -18,9 +18,10 @@ em SQLite, emite SSE, e um servidor MCP .NET que expõe os mesmos 13 tools.
 
 - **Runtime**: .NET 10 (LTS), `net10.0`, C# 13.
 - **Web**: ASP.NET Core 10 — Minimal APIs + `WebApplication` (sem framework pesado).
-- **Persistência**: SQLite via `Microsoft.EntityFrameworkCore.Sqlite` 10 **ou**
-  `Microsoft.Data.Sqlite` (raw SQL, fiel ao `node:sqlite` do original). Decisão
-  em `SPEC-001`. Migrações: script SQL idempotente espelhando `cloud/migrations/*.sql`.
+- **Persistência**: **`Microsoft.Data.Sqlite` (raw SQL)** — fiel ao `node:sqlite`
+  do original; decisão confirmada. Migrações: script SQL idempotente espelhando
+  `cloud/migrations/*.sql`. Lock otimista `version` via
+  `UPDATE ... WHERE id=@id AND version=@version`.
 - **MCP**: `ModelContextProtocol` (.NET, pacote oficial) — server `Stdio`, tools com `AIFunction`/schema JSON.
 - **Anexos**: arquivos em disco sob `<dataDir>/attachments/<id>` (igual ao original).
 - **SSE**: respostas `text/event-stream` nativas do ASP.NET Core.
@@ -131,9 +132,10 @@ app.MapPost("/api/tasks", async (CreateTaskRequest body, TaskService svc) =>
 - [ ] Skill `manage-taskboard` funciona com o novo serviço sem alteração de conteúdo.
 - [ ] Update concorrente retorna 409 `VERSION_CONFLICT` com `{expectedVersion, actualVersion}`.
 
-## Open Questions
+## Open Questions (resolvidas)
 
-1. EF Core ou Microsoft.Data.Sqlite raw? (recomendado raw para paridade 1:1 das migrações).
-2. Cloud/Cloudflare D1 no MVP ou só companion local?
-3. Frontend React reutilizado ou reescrito? (fora do primeiro milestone de backend).
-4. `workflow_workspaces` e automação Codex entram no MVP?
+1. **EF Core ou raw?** → **Raw `Microsoft.Data.Sqlite`** (paridade 1:1 das migrações e lock `version`).
+2. **Cloud no MVP?** → **Só companion local loopback**; Cloudflare D1/R2 é deployment opcional posterior.
+3. **Frontend?** → **Reescrito em Blazor (.NET MAUI para desktop)** — ver `SPEC-011-frontend-blazor.md`. App React original não é reutilizado.
+4. **Workflow/automation no MVP?** → **Sim**, incluído (`SPEC-007`).
+5. **Transporte MCP?** → **Chama a API HTTP direto** (não spawn do CLI) — confirmado em `SPEC-004`.

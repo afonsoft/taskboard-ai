@@ -44,9 +44,9 @@ O clone .NET deve produzir config equivalente apontando para `dotnet run --proje
 - Pacote `ModelContextProtocol` + `ModelContextProtocol.AspNetCore` (ou server stdio).
 - `IMcpServer` com `ListTools`/`CallTool`; cada tool declarada com `AIFunction`
   (descrição + schema JSON gerado de um record C# tipado).
-- `CallTool` → invoca `Taskboard.Cli` via `Process.Start` (ou chama a API HTTP
-  direto via `Taskboard.Client` compartilhado) passando `TASKBOARD_THREAD_ID`
-  no env. Recomendado: **chamar a API HTTP direto** (evita spawn de processo),
-  mantendo o mesmo envelope/erro.
+- `CallTool` → **chama a API HTTP do `Taskboard.Server` direto** via
+  `HttpClient` compartilhado (`Taskboard.Client`), passando `TASKBOARD_THREAD_ID`
+  no header/env. Decisão confirmada: **não** spawna o CLI (evita processo,
+  mantém o mesmo envelope/erro e contratos de `SPEC-002`/`SPEC-003`).
 - Thread attribution na mesma ordem de prioridade.
 - Transport `Stdio` (herda stdio do host de agente).

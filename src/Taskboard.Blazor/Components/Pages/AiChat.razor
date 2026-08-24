@@ -1,0 +1,31 @@
+@page "/ai-chat"
+@inject TaskboardClient Client
+
+<h1>AI Chat</h1>
+
+@if (_threads is null)
+{
+    <p><em>Loading threads...</em></p>
+}
+else if (!_threads.Any())
+{
+    <p>No threads yet.</p>
+}
+else
+{
+    <ul class="thread-list">
+        @foreach (var thread in _threads)
+        {
+            <li>@thread.Title <span class="text-muted">(@thread.Model)</span></li>
+        }
+    </ul>
+}
+
+@code {
+    private IReadOnlyCollection<AiChatThreadDto>? _threads;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _threads = await Client.GetAiChatThreadsAsync();
+    }
+}

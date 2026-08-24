@@ -1,5 +1,10 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +12,8 @@ using Taskboard;
 using Taskboard.Domain.Entities;
 using Taskboard.Domain.Events;
 using Taskboard.Dtos;
+using Taskboard.Blazor;
+using Taskboard.Blazor.Services;
 using Taskboard.EntityFrameworkCore;
 using Taskboard.EntityFrameworkCore.Data;
 using Taskboard.Integrations.Execution;
@@ -52,6 +59,33 @@ builder.Services.AddSingleton<IExecutableResolver, CodexExecutableResolver>();
 builder.Services.AddSingleton<IProcessTreeSignaler, ProcessTreeSignaler>();
 builder.Services.AddHttpClient<JiraService>();
 
+builder.Services.AddHttpClient<TaskboardClient>(client =>
+{
+    var baseAddress = serverUrls.Split(';', StringSplitOptions.RemoveEmptyEntries)
+        .Select(s => s.Trim())
+        .FirstOrDefault() ?? "http://127.0.0.1:47823";
+    client.BaseAddress = new Uri(baseAddress);
+});
+
+builder.Services.AddRazorComponents();
+
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.LoginPath = "/login";
+        options.AccessDeniedPath = "/login";
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.HttpOnly = true;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddHttpContextAccessor();
+
+var adminDataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
+                   ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
+builder.Services.AddSingleton(AdminUser.CreateFromConfiguration(builder.Configuration, adminDataDir));
+
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
 Directory.CreateDirectory(dataDir);
@@ -79,6 +113,43 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 var api = app.MapGroup("/api");
+
+api.MapPost("login", async (HttpContext context, AdminUser admin) =>
+{
+    var form = await context.Request.ReadFormAsync();
+    var username = form["Username"].ToString();
+    var password = form["Password"].ToString();
+    var returnUrl = form["ReturnUrl"].ToString() ?? "/";
+
+    if (!string.Equals(admin.Username, username, StringComparison.Ordinal)
+        || !admin.Validate(password))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await context.Response.WriteAsync("Invalid credentials");
+        return;
+    }
+
+    var claims = new[]
+    {
+        new Claim(ClaimTypes.Name, username),
+        new Claim(ClaimTypes.Role, "Admin")
+    };
+    var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+    var principal = new ClaimsPrincipal(identity);
+
+    await context.SignInAsync(
+        CookieAuthenticationDefaults.AuthenticationScheme,
+        principal,
+        new AuthenticationProperties { IsPersistent = true, RedirectUri = returnUrl });
+
+    context.Response.Redirect(returnUrl);
+}).DisableAntiforgery();
+
+api.MapPost("logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    context.Response.Redirect("/login");
+}).DisableAntiforgery();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }));
 
@@ -806,9 +877,39 @@ app.MapGet("/api/events", async (HttpResponse response, IEventStreamService even
     }
 });
 
-app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
+app.UseAuthentication();
+
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? string.Empty;
+
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        await next();
+        return;
+    }
+
+    if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/_framework/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/img/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/health", StringComparison.OrdinalIgnoreCase)
+        || path.Equals("/login", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/login", StringComparison.OrdinalIgnoreCase))
+    {
+        await next();
+        return;
+    }
+
+    context.Response.Redirect("/login");
+});
+
+app.UseAntiforgery();
+
+app.MapRazorComponents<App>();
 
 app.Run();
 

@@ -71,6 +71,8 @@ See [`.specs/CAPABILITY-MAP.md`](.specs/CAPABILITY-MAP.md).
 - [`docs/plugins.md`](docs/plugins.md) — Plugins and integrations
 - [`docs/features.md`](docs/features.md) — Features
 - [`docs/api.md`](docs/api.md) — REST API and SSE
+- [`docs/architecture/`](docs/architecture/) — Architecture diagrams (generated with the Archify skill)
+  - [`docs/architecture/architecture.html`](docs/architecture/architecture.html) — Interactive system architecture diagram
 - [`.specs/`](.specs/) — Specification-driven development (SDD) specs
 
 ## Agent Harness

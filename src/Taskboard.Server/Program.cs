@@ -22,6 +22,11 @@ using TaskStatus = Taskboard.ValueObjects.TaskStatus;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var taskboardPort = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_PORT") ?? "47823";
+var serverUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
+    ?? $"http://127.0.0.1:{taskboardPort}";
+builder.WebHost.UseUrls(serverUrls);
+
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddCors(options =>
@@ -119,6 +124,19 @@ projects.MapPost("", async (CreateProjectRequest request, IRepository<Project> p
     await projectRepo.SaveChangesAsync(ct);
 
     return Results.Created($"/api/projects/{project.Id.Value}", new { project = project.ToDto(0L) });
+});
+
+projects.MapGet("{id}", async (string id, IRepository<Project> projectRepo, IRepository<DomainTask> taskRepo, CancellationToken ct) =>
+{
+    var projectId = ProjectId.From(id);
+    var project = await projectRepo.GetAsync(projectId, ct);
+    if (project is null)
+    {
+        return Results.NotFound(new { error = new { code = "PROJECT_NOT_FOUND", message = $"Project '{id}' not found." } });
+    }
+
+    var issueCount = await taskRepo.Query.CountAsync(t => t.ProjectId == projectId && !t.ArchivedAt.HasValue, ct);
+    return Results.Ok(new { project = project.ToDto(issueCount) });
 });
 
 var tasks = api.MapGroup("/tasks");

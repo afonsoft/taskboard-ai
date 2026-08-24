@@ -1,14 +1,25 @@
 using System.Security.Cryptography;
-using System.Text;
+using Microsoft.AspNetCore.Identity;
 
 namespace Taskboard.Server.Services;
 
+/// <summary>
+/// Representa o usuário administrador carregado das configurações do servidor.
+/// </summary>
 public sealed class AdminUser
 {
+    /// <summary>Nome de usuário do administrador.</summary>
     public string Username { get; }
+
+    /// <summary>Hash da senha gerado pelo <see cref="PasswordHasher{TUser}"/>.</summary>
     public string PasswordHash { get; }
+
+    /// <summary>Caminho do arquivo onde a senha em texto plano foi persistida, quando gerada automaticamente.</summary>
     public string? PasswordFilePath { get; }
 
+    /// <summary>
+    /// Cria uma nova instância de <see cref="AdminUser"/>.
+    /// </summary>
     public AdminUser(string username, string passwordHash, string? passwordFilePath = null)
     {
         Username = username;
@@ -16,6 +27,9 @@ public sealed class AdminUser
         PasswordFilePath = passwordFilePath;
     }
 
+    /// <summary>
+    /// Verifica se a senha informada corresponde ao hash armazenado.
+    /// </summary>
     public bool Validate(string? password)
     {
         if (string.IsNullOrWhiteSpace(password))
@@ -23,10 +37,14 @@ public sealed class AdminUser
             return false;
         }
 
-        var hash = HashPassword(password);
-        return PasswordHash.Equals(hash, StringComparison.OrdinalIgnoreCase);
+        var result = new PasswordHasher<AdminUser>().VerifyHashedPassword(this, PasswordHash, password);
+        return result is PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded;
     }
 
+    /// <summary>
+    /// Carrega as credenciais do administrador a partir da configuração ou variáveis de ambiente,
+    /// gerando uma senha aleatória quando nenhuma for fornecida.
+    /// </summary>
     public static AdminUser CreateFromConfiguration(IConfiguration configuration, string dataDirectory)
     {
         var username = configuration["Admin:Username"]
@@ -53,20 +71,14 @@ public sealed class AdminUser
             }
         }
 
-        var passwordHash = HashPassword(password);
+        var user = new AdminUser(username, string.Empty, passwordFilePath);
+        var passwordHash = new PasswordHasher<AdminUser>().HashPassword(user, password);
         return new AdminUser(username, passwordHash, passwordFilePath);
     }
 
     private static string GenerateRandomPassword()
     {
-        var bytes = RandomNumberGenerator.GetBytes(16);
+        var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToHexString(bytes).ToLowerInvariant();
-    }
-
-    private static string HashPassword(string password)
-    {
-        var bytes = Encoding.UTF8.GetBytes(password);
-        var hash = SHA256.HashData(bytes);
-        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

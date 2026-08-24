@@ -269,7 +269,7 @@ create_wrappers() {
     local server_dll
     server_dll="$REPO_DIR/src/Taskboard.Server/bin/Release/net10.0/Taskboard.Server.dll"
     local mcp_dll
-    mcp_dll="$REPO_DIR/src/Taskboard.McpServer/bin/Release/net10.0/Taskboard.McpServer.dll"
+    mcp_dll="$REPO_DIR/src/Taskboard.Mcp/bin/Release/net10.0/Taskboard.Mcp.dll"
     local server_content_root
     server_content_root="$REPO_DIR/src/Taskboard.Server"
 

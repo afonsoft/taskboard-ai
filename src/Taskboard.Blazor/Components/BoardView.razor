@@ -14,19 +14,26 @@ else
         {
             <div class="column">
                 <h3>@status</h3>
-                @foreach (var task in _tasks.Where(t => t.Status == status).OrderBy(t => t.SortOrder))
+                @foreach (var task in GetTasks(status))
                 {
                     <TaskCard Task="task" />
                 }
             </div>
         }
+        <div class="column">
+            <h3>archived</h3>
+            @foreach (var task in _tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder))
+            {
+                <TaskCard Task="task" />
+            }
+        </div>
     </div>
 }
 
 @code {
     private ProjectDto? _project;
     private List<TaskDto> _tasks = [];
-    private readonly string[] _statuses = ["todo", "in_progress", "done", "archived"];
+    private readonly string[] _statuses = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "canceled"];
 
     protected override async Task OnInitializedAsync()
     {
@@ -38,5 +45,12 @@ else
             var tasks = await Client.GetTasksAsync(_project.Id);
             _tasks = tasks.ToList();
         }
+    }
+
+    private IEnumerable<TaskDto> GetTasks(string status)
+    {
+        return _tasks
+            .Where(t => t.Status == status && t.ArchivedAt is null)
+            .OrderBy(t => t.SortOrder);
     }
 }

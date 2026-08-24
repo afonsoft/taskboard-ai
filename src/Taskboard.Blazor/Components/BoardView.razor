@@ -1,0 +1,42 @@
+@page "/"
+@inject TaskboardClient Client
+
+<h1>Board</h1>
+
+@if (_project is null)
+{
+    <p><em>Loading project...</em></p>
+}
+else
+{
+    <div class="board">
+        @foreach (var status in _statuses)
+        {
+            <div class="column">
+                <h3>@status</h3>
+                @foreach (var task in _tasks.Where(t => t.Status == status).OrderBy(t => t.SortOrder))
+                {
+                    <TaskCard Task="task" />
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private ProjectDto? _project;
+    private List<TaskDto> _tasks = [];
+    private readonly string[] _statuses = ["todo", "in_progress", "done", "archived"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var projects = await Client.GetProjectsAsync();
+        _project = projects.FirstOrDefault();
+
+        if (_project is not null)
+        {
+            var tasks = await Client.GetTasksAsync(_project.Id);
+            _tasks = tasks.ToList();
+        }
+    }
+}

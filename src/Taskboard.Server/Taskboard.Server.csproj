@@ -8,5 +8,6 @@
     <ProjectReference Include="../Taskboard.EntityFrameworkCore/Taskboard.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../Taskboard.Application.Contracts/Taskboard.Application.Contracts.csproj" />
     <ProjectReference Include="../Taskboard.Integrations/Taskboard.Integrations.csproj" />
+    <ProjectReference Include="../Taskboard.Blazor/Taskboard.Blazor.csproj" />
   </ItemGroup>
 </Project>

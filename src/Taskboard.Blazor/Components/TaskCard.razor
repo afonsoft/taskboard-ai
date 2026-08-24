@@ -1,0 +1,12 @@
+<div class="task-card">
+    <div class="task-title">@Task.Title</div>
+    <div class="task-meta">
+        <span class="badge">@Task.Priority</span>
+        <span class="status">@Task.Status</span>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public TaskDto Task { get; set; } = default!;
+}

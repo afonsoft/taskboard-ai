@@ -7,6 +7,8 @@ using Taskboard;
 using Taskboard.Domain.Entities;
 using Taskboard.Domain.Events;
 using Taskboard.Dtos;
+using Taskboard.Blazor;
+using Taskboard.Blazor.Services;
 using Taskboard.EntityFrameworkCore;
 using Taskboard.EntityFrameworkCore.Data;
 using Taskboard.Integrations.Execution;
@@ -51,6 +53,16 @@ builder.Services.AddSingleton<IJiraService, JiraService>();
 builder.Services.AddSingleton<IExecutableResolver, CodexExecutableResolver>();
 builder.Services.AddSingleton<IProcessTreeSignaler, ProcessTreeSignaler>();
 builder.Services.AddHttpClient<JiraService>();
+
+builder.Services.AddHttpClient<TaskboardClient>(client =>
+{
+    var baseAddress = serverUrls.Split(';', StringSplitOptions.RemoveEmptyEntries)
+        .Select(s => s.Trim())
+        .FirstOrDefault() ?? "http://127.0.0.1:47823";
+    client.BaseAddress = new Uri(baseAddress);
+});
+
+builder.Services.AddRazorComponents();
 
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
@@ -806,9 +818,10 @@ app.MapGet("/api/events", async (HttpResponse response, IEventStreamService even
     }
 });
 
-app.UseDefaultFiles();
 app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
+app.UseAntiforgery();
+
+app.MapRazorComponents<App>();
 
 app.Run();
 

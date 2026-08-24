@@ -7,5 +7,6 @@
     <ProjectReference Include="../Taskboard.Application/Taskboard.Application.csproj" />
     <ProjectReference Include="../Taskboard.EntityFrameworkCore/Taskboard.EntityFrameworkCore.csproj" />
     <ProjectReference Include="../Taskboard.Application.Contracts/Taskboard.Application.Contracts.csproj" />
+    <ProjectReference Include="../Taskboard.Integrations/Taskboard.Integrations.csproj" />
   </ItemGroup>
 </Project>

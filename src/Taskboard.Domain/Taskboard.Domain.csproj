@@ -5,4 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../Taskboard.Domain.Shared/Taskboard.Domain.Shared.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Volo.Abp.Ddd.Domain" />
+  </ItemGroup>
 </Project>

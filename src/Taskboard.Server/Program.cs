@@ -43,6 +43,7 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<IEventStreamService, InMemoryEventStreamService>();
 builder.Services.AddSingleton<IThreadEventStreamService, InMemoryThreadEventStreamService>();
 builder.Services.AddSingleton<AiCatalogService>();
+builder.Services.AddSingleton<CloudSessionService>();
 
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
@@ -74,15 +75,19 @@ var api = app.MapGroup("/api");
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }));
 
-api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0" }));
+api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }));
 
 api.MapGet("/client-storage", () => Results.Ok(new { data = (string?)null }));
 api.MapPut("/client-storage", (object? _) => Results.NoContent());
 
 api.MapGet("/local/codex-thread-progress", () => Results.Ok(new { progress = (string?)null }));
 api.MapGet("/local/host-runtime", () => Results.Ok(new { runtime = "dotnet", version = Environment.Version.ToString() }));
-api.MapGet("/local/cloud-session", () => Results.Ok(new { connected = false }));
-api.MapPut("/local/cloud-session", (object? _) => Results.Ok(new { connected = false }));
+api.MapGet("/local/cloud-session", (CloudSessionService cloud) => Results.Ok(cloud.Get()));
+api.MapPut("/local/cloud-session", (UpdateCloudSessionRequest request, CloudSessionService cloud) =>
+{
+    var session = cloud.Update(request);
+    return Results.Ok(session);
+});
 api.MapGet("/local/jira-connection", () => Results.Ok(new { connected = false }));
 api.MapPost("/local/jira-connection", (object? _) => Results.Ok(new { connected = false }));
 api.MapPost("/local/jira-connection/sync", () => Results.Accepted());

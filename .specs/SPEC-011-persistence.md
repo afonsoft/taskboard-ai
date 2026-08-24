@@ -1,15 +1,15 @@
-# SPEC-009: Persistência e Banco de Dados
+# SPEC-011: Persistence
 
 ## 0. SPEC Metadata
 
 | Field | Value |
 |---|---|
-| Feature name | Persistência e Banco de Dados |
-| Product / System | dashi-taskboard |
+| Feature name | Persistence and Database |
+| Product / System | taskboard-ai |
 | Module / Bounded Context | Infrastructure |
 | Change type | Migration |
-| Repository | afonsoft/dashi-taskboard |
-| Suggested branch | devin/spec-persistence-net10 |
+| Repository | afonsoft/taskboard-ai |
+| Suggested branch | `devin/spec-persistence-net10` |
 | Technical owner | afonsoft |
 | Status | Draft |
 | Date | 2026-08-24 |
@@ -35,7 +35,7 @@ Criar `Taskboard.EntityFrameworkCore` com EF Core 10, SQLite, configuração de 
 
 ### Out of scope
 
-- Sincronização D1/R2 (SPEC-010).
+- Sincronização D1/R2 (ver `SPEC-006`, `SPEC-010`).
 
 ---
 
@@ -48,6 +48,11 @@ Criar `Taskboard.EntityFrameworkCore` com EF Core 10, SQLite, configuração de 
 ## 3. Agent Autonomy Level
 
 3
+
+### Restrictions
+
+- Não colocar lógica de negócio nos repositórios.
+- Não expor connection strings em appsettings.
 
 ---
 
@@ -97,7 +102,7 @@ Mapear schema para EF Core e implementar repositórios.
 ### FR-001: Entidades
 
 **Description:**  
-Tabelas: Projects, Tasks, Comments, TaskActivities, Attachments, WorkflowWorkspaces, ProjectSummaries, AiChatThreads, AiChatRuns, AiChatEvents, TaskRelations.
+Tabelas: `Projects`, `Tasks`, `Comments`, `TaskActivities`, `Attachments`, `WorkflowWorkspaces`, `ProjectSummaries`, `AiChatThreads`, `AiChatRuns`, `AiChatEvents`, `TaskRelations`.
 
 ### FR-002: Constraints
 
@@ -107,7 +112,7 @@ Manter `CHECK` de enums, `UNIQUE`, `FOREIGN KEY`, `NOT NULL`.
 ### FR-003: Indexes
 
 **Description:**  
-Recriar índices para desempenho: `tasks_project_status_sort`, `comments_task_created`, `task_activities_task_created`, `attachments_task_created`, etc.
+Recriar índices para desempenho.
 
 ### FR-004: Migration e Seed
 
@@ -126,13 +131,35 @@ Migration inicial cria tabelas e insere projeto `local`.
 
 ## 8. Domain Modeling
 
-Ver SPEC-002.
+Ver `SPEC-001-domain-model.md`.
 
 ---
 
 ## 9. Expected Architecture
 
 `Taskboard.EntityFrameworkCore` com `DbContext`, `IRepository<T>` implementado e UnitOfWork via ABP.
+
+```text
+src/Taskboard.EntityFrameworkCore/
+  Data/
+    TaskboardDbContext.cs
+  Configurations/
+    ProjectConfiguration.cs
+    TaskConfiguration.cs
+    CommentConfiguration.cs
+    AttachmentConfiguration.cs
+    TaskRelationConfiguration.cs
+    TaskActivityConfiguration.cs
+    WorkflowWorkspaceConfiguration.cs
+    AiChatThreadConfiguration.cs
+    AiChatRunConfiguration.cs
+    AiChatEventConfiguration.cs
+    ProjectSummaryConfiguration.cs
+  Repositories/
+    EfCoreProjectRepository.cs
+    EfCoreTaskRepository.cs
+  Migrations/
+```
 
 ---
 
@@ -166,9 +193,41 @@ Não aplica.
 | AiChatEvents | Eventos de IA |
 | TaskRelations | Relacionamentos |
 
+### Schema highlights
+
+#### `projects`
+
+- `id` (text PK, <=128)
+- `name` (text, not null)
+- `workspace_path` (text, nullable)
+- `labels` (text JSON)
+- `next_task_number` (integer, default 1)
+- `created_at`, `updated_at` (text ISO 8601)
+
+#### `tasks`
+
+- `id` (text PK, <=128)
+- `identifier` (text, unique, not null)
+- `project_id` (text FK projects.id)
+- `title` (text <=240)
+- `status` (text CHECK)
+- `priority` (text CHECK)
+- `labels` (text JSON)
+- `sort_order` (real)
+- `thread_id`, `thread_source`, `thread_name`, `thread_url`, `thread_references` (text)
+- `creator_*`, `assignee_*` (text)
+- `workflow_id` (text)
+- `git_branch`, `worktree_path`, `worktree_branch` (text)
+- `start_date`, `due_date` (text)
+- `recurrence_interval`, `recurrence_unit` (text)
+- `external_source`, `external_origin`, `external_id`, `external_key`, `external_url` (text)
+- `archived_at` (text, nullable)
+- `version` (integer, default 1)
+- `created_at`, `updated_at` (text)
+
 ### Migration required
 
-Yes
+Yes.
 
 ### Migration strategy
 
@@ -197,7 +256,7 @@ Yes
 
 ## 13. Integrations
 
-Nenhuma.
+Nenhuma externa.
 
 ---
 
@@ -207,6 +266,7 @@ Nenhuma.
 |---|---|---|
 | Concorrência na numeração | dois create task | transação serializável |
 | SQLite locked | timeout | retry com exponential backoff |
+| Identifier duplicado | constraint | DbUpdateException |
 
 ---
 
@@ -220,15 +280,90 @@ public class TaskConfiguration : IEntityTypeConfiguration<Task>
         builder.Property(t => t.Status).HasConversion<string>().HasMaxLength(32);
         builder.HasIndex(t => new { t.ProjectId, t.ArchivedAt, t.Status, t.SortOrder, t.CreatedAt })
                .HasDatabaseName("IX_Tasks_Project_Status_Sort");
+        builder.HasIndex(t => new { t.ExternalSource, t.ExternalOrigin, t.ExternalId })
+               .IsUnique()
+               .HasDatabaseName("UIX_Tasks_External");
     }
 }
 ```
 
 ---
 
-## 16-24. Standard SSD sections
+## 16. Non-Functional Requirements
+
+- Migrations < 5s para criar schema.
+- Queries de board otimizadas por indexes.
 
 ---
+
+## 17. Mandatory Guardrails
+
+- Não colocar regras de negócio nos repositórios.
+- Connection string via env (`CODEX_TASKBOARD_DATA_DIR`) ou appsettings sem secrets.
+
+---
+
+## 18. Expected Tests
+
+| Test | Validation |
+|---|---|
+| Migration runs | schema criado |
+| Seed local | projeto local existe |
+| Concurrency | numeração atômica |
+| Repository CRUD | operações básicas |
+
+---
+
+## 19. Acceptance Criteria
+
+- [ ] DbContext criado.
+- [ ] Configurações de entidades.
+- [ ] Indexes mapeados.
+- [ ] Migration inicial.
+- [ ] Seed `local`.
+
+---
+
+## 20. Implementation Plan
+
+1. Criar `Taskboard.EntityFrameworkCore`.
+2. Configurar `TaskboardDbContext`.
+3. Configurar entidades (FluentAPI).
+4. Criar repositórios EfCore.
+5. Criar migration inicial.
+6. Seed `local` project.
+7. Testes de migration e repositório.
+
+---
+
+## 21. Rollback Strategy
+
+- Reverter migration.
+- Restaurar backup do SQLite.
+
+---
+
+## 22. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---:|---|
+| Diferença de tipos SQLite vs EF Core | Médio | Média | Mapear explicitamente, testar |
+| Migrations em produção local-first | Médio | Baixa | `EnsureCreated` ou `Migrate` controlado |
+
+---
+
+## 23. Definition of Done
+
+- [ ] Schema mapeado.
+- [ ] Migration funciona.
+- [ ] Seed `local`.
+- [ ] Tests passam.
+
+---
+
+## 24. Key Reminder
+
+> The SPEC is the contract.
 
 ## Pending Questions
 
@@ -237,4 +372,6 @@ public class TaskConfiguration : IEntityTypeConfiguration<Task>
 
 ## Human Approval Checklist
 
-Seguir template padrão SSD.
+- [ ] Schema completo.
+- [ ] Indexes e constraints.
+- [ ] Migration e seed.

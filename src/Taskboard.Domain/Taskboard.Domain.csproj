@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Taskboard.Domain.Shared/Taskboard.Domain.Shared.csproj" />
+  </ItemGroup>
+</Project>

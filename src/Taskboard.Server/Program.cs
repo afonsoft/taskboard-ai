@@ -9,6 +9,8 @@ using Taskboard.Domain.Events;
 using Taskboard.Dtos;
 using Taskboard.EntityFrameworkCore;
 using Taskboard.EntityFrameworkCore.Data;
+using Taskboard.Integrations.Execution;
+using Taskboard.Integrations.Jira;
 using Taskboard.Json;
 using Taskboard.Repositories;
 using Taskboard.Requests;
@@ -45,6 +47,10 @@ builder.Services.AddSingleton<IThreadEventStreamService, InMemoryThreadEventStre
 builder.Services.AddSingleton<AiCatalogService>();
 builder.Services.AddSingleton<CloudSessionService>();
 builder.Services.AddSingleton<WorkflowCapabilityService>();
+builder.Services.AddSingleton<IJiraService, JiraService>();
+builder.Services.AddSingleton<IExecutableResolver, CodexExecutableResolver>();
+builder.Services.AddSingleton<IProcessTreeSignaler, ProcessTreeSignaler>();
+builder.Services.AddHttpClient<JiraService>();
 
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
@@ -89,9 +95,18 @@ api.MapPut("/local/cloud-session", (UpdateCloudSessionRequest request, CloudSess
     var session = cloud.Update(request);
     return Results.Ok(session);
 });
-api.MapGet("/local/jira-connection", () => Results.Ok(new { connected = false }));
-api.MapPost("/local/jira-connection", (object? _) => Results.Ok(new { connected = false }));
-api.MapPost("/local/jira-connection/sync", () => Results.Accepted());
+api.MapGet("/local/jira-connection", (IJiraService jira) => Results.Ok(jira.GetConnection()));
+api.MapPost("/local/jira-connection", async (UpdateJiraConnectionRequest request, IJiraService jira, CancellationToken ct) =>
+{
+    jira.UpdateConnection(request);
+    var connection = await jira.TestConnectionAsync(ct);
+    return Results.Ok(connection);
+});
+api.MapPost("/local/jira-connection/sync", async (IJiraService jira, CancellationToken ct) =>
+{
+    var result = await jira.SyncAsync(ct);
+    return Results.Ok(result);
+});
 api.MapGet("/local/ai/catalog", (AiCatalogService catalog) => Results.Ok(new { models = catalog.List() }));
 api.MapPost("/local/ai/catalog", (AiChatModelDto model, AiCatalogService catalog) =>
 {

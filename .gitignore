@@ -39,6 +39,9 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
+# Local runtime data
+.data/
+
 # Others
 ~$*
 *~

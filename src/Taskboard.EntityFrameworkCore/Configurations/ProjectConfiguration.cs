@@ -1,4 +1,6 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Taskboard.Domain.Entities;
 using Taskboard.EntityFrameworkCore.ValueConverters;
@@ -27,7 +29,11 @@ public sealed class ProjectConfiguration : IEntityTypeConfiguration<Project>
 
         builder.Property<List<string>>("_labels")
             .HasColumnName("labels")
-            .HasConversion(new ListStringJsonValueConverter());
+            .HasConversion(new ListStringJsonValueConverter())
+            .Metadata.SetValueComparer(new ValueComparer<List<string>>(
+                (c1, c2) => ReferenceEquals(c1, c2) || (c1 != null && c2 != null && c1.SequenceEqual(c2)),
+                c => c == null ? 0 : c.Aggregate(0, (a, v) => HashCode.Combine(a, v.GetHashCode())),
+                c => c == null ? new List<string>() : c.ToList()));
 
         builder.Property(p => p.NextTaskNumber)
             .HasDefaultValue(1L);

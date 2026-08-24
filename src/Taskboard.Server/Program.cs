@@ -44,6 +44,7 @@ builder.Services.AddSingleton<IEventStreamService, InMemoryEventStreamService>()
 builder.Services.AddSingleton<IThreadEventStreamService, InMemoryThreadEventStreamService>();
 builder.Services.AddSingleton<AiCatalogService>();
 builder.Services.AddSingleton<CloudSessionService>();
+builder.Services.AddSingleton<WorkflowCapabilityService>();
 
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
@@ -252,10 +253,51 @@ api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
 
     return Results.Ok(new { run = run.ToDto(), thread = thread.ToDto() });
 });
-api.MapGet("/device-workspaces", () => Results.Ok(new { workspaces = Array.Empty<object>() }));
-api.MapPut("/device-workspaces", (object? _) => Results.NoContent());
-api.MapGet("/workflow-capabilities", () => Results.Ok(new { capabilities = Array.Empty<object>() }));
-api.MapPut("/workflow-capabilities", (object? _) => Results.NoContent());
+api.MapGet("/device-workspaces", async (IRepository<WorkflowWorkspace> workspaceRepo, CancellationToken ct) =>
+{
+    var workspaces = await workspaceRepo.ListAsync(ct);
+    return Results.Ok(new { workspaces = workspaces.Select(w => w.ToDto()) });
+});
+
+api.MapPut("/device-workspaces", async (
+    UpdateDeviceWorkspaceRequest request,
+    IRepository<Project> projectRepo,
+    IRepository<WorkflowWorkspace> workspaceRepo,
+    CancellationToken ct) =>
+{
+    var projectId = ProjectId.From(request.ProjectId);
+    var project = await projectRepo.GetAsync(projectId, ct);
+    if (project is null)
+    {
+        return Results.NotFound(new { error = new { code = "PROJECT_NOT_FOUND", message = $"Project '{request.ProjectId}' not found." } });
+    }
+
+    var workspaceJson = request.Workspace.GetRawText();
+    var existing = await workspaceRepo.GetAsync(projectId, ct);
+    if (existing is null)
+    {
+        var workspace = WorkflowWorkspace.Create(projectId, workspaceJson);
+        await workspaceRepo.AddAsync(workspace, ct);
+    }
+    else
+    {
+        existing.Update(workspaceJson);
+        await workspaceRepo.UpdateAsync(existing, ct);
+    }
+
+    await workspaceRepo.SaveChangesAsync(ct);
+
+    var updated = await workspaceRepo.GetAsync(projectId, ct);
+    return Results.Ok(new { workspace = updated?.ToDto() });
+});
+
+api.MapGet("/workflow-capabilities", (WorkflowCapabilityService capabilities) => Results.Ok(new { capabilities = capabilities.List() }));
+
+api.MapPut("/workflow-capabilities", (UpdateWorkflowCapabilitiesRequest request, WorkflowCapabilityService capabilities) =>
+{
+    var capability = capabilities.Upsert(request);
+    return Results.Ok(new { capability });
+});
 
 var projects = api.MapGroup("/projects");
 

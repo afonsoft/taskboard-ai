@@ -1,18 +1,5 @@
 {
   "read_config_from": {
     "claude": true
-  },
-  "permissions": {
-    "deny": [
-      "Read(./.env)",
-      "Read(**/*.key)",
-      "Read(**/*.pem)",
-      "Read(**/secrets.*)",
-      "Read(./.github/workflows/**)",
-      "Edit(./.github/workflows/**)",
-      "Bash(git push origin main)",
-      "Bash(git push origin master)",
-      "Bash(git push origin develop)"
-    ]
   }
 }

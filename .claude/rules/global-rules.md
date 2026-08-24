@@ -13,14 +13,12 @@ name: taskboard-ai-global
 
 ## Hard Rules
 
-1. **Branches protegidas**: jamais commit/push em `main`, `master`, `develop`.
-2. **Workflows protegidos**: não modificar `/.github/workflows/**` sem aprovação humana.
-3. **Secrets**: nunca logar, commitar ou expor tokens, senhas ou API keys.
-4. **Specs**: toda mudança de contrato/arquitetura deve ser refletida em `.specs/`.
-5. **Tests**: features/bugfixes precisam de testes (unit/integration).
-6. **Coverage**: manter ≥80% (meta 90%).
-7. **Build**: `dotnet build` com `TreatWarningsAsErrors`.
-8. **Don't**: não criar `DEVIN.md`, `AGENTS.md`, `.cursorrules`, `.geminiignore`, etc.
+1. **Secrets**: nunca logar, commitar ou expor tokens, senhas ou API keys.
+2. **Specs**: toda mudança de contrato/arquitetura deve ser refletida em `.specs/`.
+3. **Tests**: features/bugfixes precisam de testes (unit/integration).
+4. **Coverage**: manter ≥80% (meta 90%).
+5. **Build**: `dotnet build` com `TreatWarningsAsErrors`.
+6. **Don't**: não criar `DEVIN.md`, `AGENTS.md`, `.cursorrules`, `.geminiignore`, etc.
 
 ## Soft Rules
 

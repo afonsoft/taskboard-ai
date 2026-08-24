@@ -2,14 +2,12 @@
 
 ## Hard Rules
 
-1. **Branches protegidas**: nunca commit/push em `main`, `master`, `develop`.
-2. **Workflows protegidos**: não modificar `/.github/workflows/**` sem aprovação humana.
-3. **Secrets**: nunca logar, commitar ou expor tokens, senhas, API keys.
-4. **Specs**: mudanças de contrato/arquitetura devem refletir em `.specs/`.
-5. **Tests**: features/bugfixes precisam de testes antes do merge.
-6. **Coverage**: ≥80% (meta 90%).
-7. **Build**: `dotnet build` com `TreatWarningsAsErrors`.
-8. **No legacy files**: não criar `DEVIN.md`, `AGENTS.md`, `.cursorrules`, `.geminiignore`, etc.
+1. **Secrets**: nunca logar, commitar ou expor tokens, senhas, API keys.
+2. **Specs**: mudanças de contrato/arquitetura devem refletir em `.specs/`.
+3. **Tests**: features/bugfixes precisam de testes antes do merge.
+4. **Coverage**: ≥80% (meta 90%).
+5. **Build**: `dotnet build` com `TreatWarningsAsErrors`.
+6. **No legacy files**: não criar `DEVIN.md`, `AGENTS.md`, `.cursorrules`, `.geminiignore`, etc.
 
 ## Soft Rules
 

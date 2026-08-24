@@ -67,4 +67,34 @@ public static class DomainMappingExtensions
             attachment.Size,
             attachment.Path,
             attachment.CreatedAt);
+
+    public static AiChatThreadDto ToDto(this AiChatThread thread)
+        => new(
+            thread.Id.Value,
+            thread.Title,
+            thread.OriginProjectId?.Value,
+            thread.Model.Value,
+            thread.ReasoningEffort,
+            thread.Sandbox.Value,
+            thread.Status.Value,
+            thread.CreatedAt,
+            thread.UpdatedAt,
+            thread.Version);
+
+    public static AiChatRunDto ToDto(this AiChatRun run)
+        => new(
+            run.Id.Value,
+            run.ThreadId.Value,
+            run.Status,
+            run.ExitCode,
+            run.CreatedAt,
+            run.FinishedAt);
+
+    public static AiChatEventDto ToDto(this AiChatEvent chatEvent)
+        => new(
+            chatEvent.Id.Value,
+            chatEvent.ThreadId.Value,
+            chatEvent.Role.Value,
+            chatEvent.Content,
+            chatEvent.CreatedAt);
 }

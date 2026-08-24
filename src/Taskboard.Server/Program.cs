@@ -41,6 +41,8 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddSingleton<IEventStreamService, InMemoryEventStreamService>();
+builder.Services.AddSingleton<IThreadEventStreamService, InMemoryThreadEventStreamService>();
+builder.Services.AddSingleton<AiCatalogService>();
 
 var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
               ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
@@ -84,12 +86,167 @@ api.MapPut("/local/cloud-session", (object? _) => Results.Ok(new { connected = f
 api.MapGet("/local/jira-connection", () => Results.Ok(new { connected = false }));
 api.MapPost("/local/jira-connection", (object? _) => Results.Ok(new { connected = false }));
 api.MapPost("/local/jira-connection/sync", () => Results.Accepted());
-api.MapGet("/local/ai/catalog", () => Results.Ok(new { models = Array.Empty<object>() }));
-api.MapPost("/local/ai/catalog", (object? _) => Results.Ok(new { models = Array.Empty<object>() }));
+api.MapGet("/local/ai/catalog", (AiCatalogService catalog) => Results.Ok(new { models = catalog.List() }));
+api.MapPost("/local/ai/catalog", (AiChatModelDto model, AiCatalogService catalog) =>
+{
+    var added = catalog.TryAdd(model);
+    return added ? Results.Created($"/api/local/ai/catalog/{model.Id}", new { model }) : Results.Conflict(new { error = new { code = "MODEL_EXISTS", message = $"Model '{model.Id}' already exists." } });
+});
 api.MapGet("/local/ai/composer/candidates", () => Results.Ok(new { candidates = Array.Empty<object>() }));
 api.MapPost("/local/ai/composer/rebind", (object? _) => Results.NoContent());
-api.MapGet("/local/ai/threads", () => Results.Ok(new { threads = Array.Empty<object>() }));
-api.MapPost("/local/ai/threads", (object? _) => Results.Ok(new { threadId = (string?)null }));
+
+api.MapGet("/local/ai/threads", async (IRepository<AiChatThread> threadRepo, CancellationToken ct) =>
+{
+    var threads = await threadRepo.ListAsync(ct);
+    return Results.Ok(new { threads = threads.Select(t => t.ToDto()) });
+});
+
+api.MapPost("/local/ai/threads", async (
+    CreateAiChatThreadRequest request,
+    AiCatalogService catalog,
+    IRepository<Project> projectRepo,
+    IRepository<AiChatThread> threadRepo,
+    CancellationToken ct) =>
+{
+    if (!catalog.Contains(request.Model))
+    {
+        return Results.BadRequest(new { error = new { code = "MODEL_NOT_IN_CATALOG", message = $"Model '{request.Model}' is not in the catalog." } });
+    }
+
+    ProjectId? originProjectId = null;
+    if (!string.IsNullOrWhiteSpace(request.OriginProjectId))
+    {
+        originProjectId = ProjectId.From(request.OriginProjectId);
+        var project = await projectRepo.GetAsync(originProjectId, ct);
+        if (project is null)
+        {
+            return Results.NotFound(new { error = new { code = "PROJECT_NOT_FOUND", message = $"Project '{request.OriginProjectId}' not found." } });
+        }
+    }
+
+    var thread = AiChatThread.Create(
+        AiChatThreadId.NewGuid(),
+        request.Title,
+        originProjectId,
+        ModelRef.From(request.Model),
+        request.ReasoningEffort,
+        Sandbox.From(request.Sandbox));
+
+    await threadRepo.AddAsync(thread, ct);
+    await threadRepo.SaveChangesAsync(ct);
+
+    return Results.Created($"/api/local/ai/threads/{thread.Id.Value}", new { thread = thread.ToDto() });
+});
+
+api.MapGet("/local/ai/threads/{id}/events", async (HttpResponse response, string id, IRepository<AiChatEvent> eventRepo, IThreadEventStreamService threadEvents, CancellationToken ct) =>
+{
+    var threadId = AiChatThreadId.From(id);
+    var existing = await eventRepo.Query.Where(e => e.ThreadId == threadId).OrderBy(e => e.CreatedAt).Select(e => e.ToDto()).ToListAsync(ct);
+
+    response.Headers.ContentType = "text/event-stream";
+    response.Headers.CacheControl = "no-cache";
+
+    foreach (var ev in existing)
+    {
+        await response.WriteAsync($"event: ai_chat.event\n", ct);
+        await response.WriteAsync($"data: {JsonSerializer.Serialize(ev, ApiJsonOptions.Default)}\n\n", ct);
+    }
+
+    await response.Body.FlushAsync(ct);
+
+    await foreach (var ev in threadEvents.SubscribeAsync(id, ct))
+    {
+        await response.WriteAsync($"event: {ev.Type}\n", ct);
+        await response.WriteAsync($"data: {JsonSerializer.Serialize(ev.Payload, ApiJsonOptions.Default)}\n\n", ct);
+        await response.Body.FlushAsync(ct);
+    }
+});
+
+api.MapPost("/local/ai/threads/{id}/events", async (
+    string id,
+    AddAiChatEventRequest request,
+    IRepository<AiChatThread> threadRepo,
+    IRepository<AiChatEvent> eventRepo,
+    IThreadEventStreamService threadEvents,
+    CancellationToken ct) =>
+{
+    var threadId = AiChatThreadId.From(id);
+    var thread = await threadRepo.GetAsync(threadId, ct);
+    if (thread is null)
+    {
+        return Results.NotFound(new { error = new { code = "THREAD_NOT_FOUND", message = $"Thread '{id}' not found." } });
+    }
+
+    var role = AiChatEventRole.From(request.Role);
+    var chatEvent = AiChatEvent.Create(AiChatEventId.NewGuid(), threadId, role, request.Content);
+    await eventRepo.AddAsync(chatEvent, ct);
+    await eventRepo.SaveChangesAsync(ct);
+
+    await threadEvents.PublishAsync(id, new ServerSentEvent("ai_chat.event", chatEvent.ToDto()), ct);
+
+    return Results.Created($"/api/local/ai/threads/{id}/events/{chatEvent.Id.Value}", new { aiChatEvent = chatEvent.ToDto() });
+});
+
+api.MapPost("/local/ai/threads/{id}/runs", async (
+    string id,
+    IRepository<AiChatThread> threadRepo,
+    IRepository<AiChatRun> runRepo,
+    CancellationToken ct) =>
+{
+    var threadId = AiChatThreadId.From(id);
+    var thread = await threadRepo.GetAsync(threadId, ct);
+    if (thread is null)
+    {
+        return Results.NotFound(new { error = new { code = "THREAD_NOT_FOUND", message = $"Thread '{id}' not found." } });
+    }
+
+    var run = thread.StartRun();
+    await runRepo.AddAsync(run, ct);
+    await runRepo.SaveChangesAsync(ct);
+
+    return Results.Created($"/api/local/ai/threads/{id}/runs/{run.Id.Value}", new { run = run.ToDto() });
+});
+
+api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
+    string threadId,
+    string runId,
+    UpdateAiChatRunRequest request,
+    IRepository<AiChatThread> threadRepo,
+    IRepository<AiChatRun> runRepo,
+    CancellationToken ct) =>
+{
+    var thread = await threadRepo.GetAsync(AiChatThreadId.From(threadId), ct);
+    if (thread is null)
+    {
+        return Results.NotFound(new { error = new { code = "THREAD_NOT_FOUND", message = $"Thread '{threadId}' not found." } });
+    }
+
+    var run = await runRepo.GetAsync(AiChatRunId.From(runId), ct);
+    if (run is null || run.ThreadId != thread.Id)
+    {
+        return Results.NotFound(new { error = new { code = "RUN_NOT_FOUND", message = $"Run '{runId}' not found." } });
+    }
+
+    if (request.Status.Equals("completed", StringComparison.OrdinalIgnoreCase))
+    {
+        run.Complete(request.ExitCode ?? 0);
+    }
+    else if (request.Status.Equals("failed", StringComparison.OrdinalIgnoreCase))
+    {
+        run.Fail(request.ExitCode);
+    }
+    else
+    {
+        return Results.BadRequest(new { error = new { code = "INVALID_RUN_STATUS", message = $"Status '{request.Status}' is not valid." } });
+    }
+
+    thread.SetStatus(run.Status.Equals("completed", StringComparison.OrdinalIgnoreCase) ? AiChatThreadStatus.Idle : AiChatThreadStatus.Failed);
+    await runRepo.UpdateAsync(run, ct);
+    await threadRepo.UpdateAsync(thread, ct);
+    await runRepo.SaveChangesAsync(ct);
+
+    return Results.Ok(new { run = run.ToDto(), thread = thread.ToDto() });
+});
 api.MapGet("/device-workspaces", () => Results.Ok(new { workspaces = Array.Empty<object>() }));
 api.MapPut("/device-workspaces", (object? _) => Results.NoContent());
 api.MapGet("/workflow-capabilities", () => Results.Ok(new { capabilities = Array.Empty<object>() }));

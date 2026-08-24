@@ -42,4 +42,44 @@ public class TaskRelationTests
         relation.IsEquivalent(a, b, RelationType.Related).ShouldBeTrue();
         relation.IsEquivalent(b, a, RelationType.Related).ShouldBeTrue();
     }
+
+    [Fact]
+    public void Dado_Related_Quando_ConsultarIsEquivalentComInverso_Entao_Symmetric()
+    {
+        var a = TaskId.From("a");
+        var b = TaskId.From("b");
+
+        var relationAB = TaskRelation.Create(a, b, RelationType.Related, Now);
+        var relationBA = TaskRelation.Create(b, a, RelationType.Related, Now);
+
+        relationAB.IsEquivalent(a, b, RelationType.Related).ShouldBeTrue();
+        relationAB.IsEquivalent(b, a, RelationType.Related).ShouldBeTrue();
+
+        relationBA.IsEquivalent(a, b, RelationType.Related).ShouldBeTrue();
+        relationBA.IsEquivalent(b, a, RelationType.Related).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Dado_Blocks_Quando_Inverter_Entao_NaoEquivalente()
+    {
+        var a = TaskId.From("a");
+        var b = TaskId.From("b");
+
+        var relationAB = TaskRelation.Create(a, b, RelationType.Blocks, Now);
+
+        relationAB.IsEquivalent(a, b, RelationType.Blocks).ShouldBeTrue();
+        relationAB.IsEquivalent(b, a, RelationType.Blocks).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Dado_Parent_Quando_Inverter_Entao_NaoEquivalente()
+    {
+        var a = TaskId.From("a");
+        var b = TaskId.From("b");
+
+        var relationAB = TaskRelation.Create(a, b, RelationType.Parent, Now);
+
+        relationAB.IsEquivalent(a, b, RelationType.Parent).ShouldBeTrue();
+        relationAB.IsEquivalent(b, a, RelationType.Parent).ShouldBeFalse();
+    }
 }

@@ -1,141 +1,645 @@
-# Spec: Codex Taskboard Clone (C# .NET 10)
+# SPEC-000: Visão Geral / Overview
 
-## Objective
+## 0. SPEC Metadata
 
-Clonar o comportamento funcional do `dashi-taskboard` (local-first issue board
-com integração a agentes de IA via CLI, MCP e Skills) para uma base **C# .NET 10**.
-Esta spec é a visão de alto nível; cada subsistema tem sua própria spec em
-`CAPABILITY-MAP.md`. O sistema-fonte é a fonte de verdade; o clone deve manter
-paridade de **API HTTP, modelo de dados, comportamento de concorrência e
-contrato MCP** para que o CLI, a Skill e os clientes React existentes continuem
-funcionando sem mudança.
+| Field | Value |
+|---|---|
+| Feature name | Visão Geral da Migração / Migration Overview |
+| Product / System | taskboard-ai (clone de `dashi-taskboard` / Codex Taskboard) |
+| Module / Bounded Context | Taskboard Platform |
+| Change type | Migration / Reescrita |
+| Repository | afonsoft/taskboard-ai |
+| Suggested branch | `devin/specs-harness-docs` |
+| Technical owner | afonsoft |
+| Status | Draft |
+| Date | 2026-08-24 |
+| Target agent | Devin |
 
-Usuário-alvo: engenheiros construindo o backend .NET e integrações de agente.
-Sucesso = um serviço .NET 10 que responde à mesma superfície `/api/*`, persiste
-em SQLite, emite SSE, e um servidor MCP .NET que expõe os mesmos 13 tools.
+---
 
-## Tech Stack (alvo)
+## 1. Executive Summary
 
-- **Runtime**: .NET 10 (LTS), `net10.0`, C# 13.
-- **Web**: ASP.NET Core 10 — Minimal APIs + `WebApplication` (sem framework pesado).
-- **Persistência**: **`Microsoft.Data.Sqlite` (raw SQL)** — fiel ao `node:sqlite`
-  do original; decisão confirmada. Migrações: script SQL idempotente espelhando
-  `cloud/migrations/*.sql`. Lock otimista `version` via
-  `UPDATE ... WHERE id=@id AND version=@version`.
-- **MCP**: `ModelContextProtocol` (.NET, pacote oficial) — server `Stdio`, tools com `AIFunction`/schema JSON.
-- **Anexos**: arquivos em disco sob `<dataDir>/attachments/<id>` (igual ao original).
-- **SSE**: respostas `text/event-stream` nativas do ASP.NET Core.
-- **Testes**: `xUnit` + `FluentAssertions`; testes de integração HTTP com `WebApplicationFactory`.
-- **Build/CLI**: `dotnet` CLI; o `taskctl` vira um projeto console `Taskboard.Cli`.
+### Problem
 
-## Commands
+O repositório `afonsoft/taskboard-ai` é uma aplicação local-first de gestão de tarefas (issue board) implementada originalmente em Node.js 22.5+, React 19, Vite, TypeScript e SQLite nativo (`node:sqlite`). A aplicação possui servidor HTTP raw `node:http`, CLI `taskctl`, servidor MCP, Skill para agentes de IA e interface web. O objetivo é produzir um clone funcional em **C# 14 / .NET 10**, preservando comportamento, contratos HTTP e integrações com agentes via MCP e Skill.
+
+### Objective
+
+Criar uma aplicação C# .NET 10 (ASP.NET Core minimal APIs + ABP N-Layer) que replique a funcionalidade atual: projetos, tarefas, comentários, anexos, relacionamentos, workspaces de workflow, chat de IA, sincronização Jira, CLI e servidor MCP.
+
+### Expected outcome
+
+Após a migração, a aplicação .NET 10 deve:
+
+- Atender às mesmas rotas HTTP documentadas nos specs.
+- Persistir os mesmos dados em SQLite/EF Core.
+- Oferecer CLI equivalente ao `taskctl`.
+- Expor servidor MCP com as mesmas ferramentas.
+- Disponibilizar Skill para agentes no padrão Agent Skills.
+- Reimplementar a UI em Blazor/MAUI (fase futura) ou, nesta fase, servir a SPA React existente.
+
+### Out of scope
+
+- Reescrita da UI web em outra tecnologia pode ser escopo futuro; nesta fase a UI pode ser servida estaticamente.
+- Deploy Cloudflare Workers/D1/R2 detalhado em `SPEC-006` e `SPEC-010`.
+- Modificação do código-fonte Node.js original (não reescrever o projeto legado).
+- Implementação real de C# neste trabalho (somente especificações e estrutura).
+
+---
+
+## 2. Agent Role
+
+> You are a senior software engineer specialized in C# 14, .NET 10, Clean Architecture, Domain-Driven Design, ABP N-Layer, automated testing, security, observability, and clean code.  
+> Your responsibility is to implement the migration according to each SPEC without inventing requirements, expanding the scope, or making undocumented architectural decisions.
+
+### Expected behavior
+
+- Be conservative with architectural changes.
+- Preserve backward compatibility whenever possible.
+- Prioritize readability, testability, and maintainability.
+- Make uncertainty explicit before implementing.
+- Do not introduce external dependencies without justification.
+- Do not remove existing tests without a documented technical reason.
+- Do not change public contracts without declaring the impact.
+
+---
+
+## 3. Agent Autonomy Level
+
+### Selected level
+
+3
+
+### Restrictions associated with this level
+
+- Do not push directly to `main`.
+- Do not change database schemas without migration and rollback plan.
+- Do not publish packages or deploy automatically.
+- Do not alter existing Node.js source code.
+- Do not implement C# code before all specs and harness are ready.
+
+---
+
+## 4. Product Context
+
+### Functional context
+
+O Taskboard é um quadro de tarefas local-first, compatível com múltiplos agentes de IA, com sincronização opcional Jira, CLI `taskctl` e servidor MCP.
+
+### Technical context
+
+**Atual (Node.js):**
+
+- Node.js 22.5+ com `node:sqlite`.
+- Servidor raw `node:http` (não Fastify/Express).
+- React 19 + Vite frontend.
+- Tauri para desktop.
+- CLI `taskctl` em `cli/taskctl.mjs`.
+- MCP server em `mcp/index.mjs`.
+- Skill em `skills/manage-taskboard/SKILL.md`.
+- Cloud: Cloudflare/D1/R2 via `wrangler`.
+
+**Alvo (.NET 10):**
+
+- C# 14.
+- ASP.NET Core Minimal APIs.
+- ABP N-Layer / Clean Architecture.
+- EF Core 10 com SQLite (local-first); PostgreSQL/SQL Server opcional.
+- xUnit + Shouldly + NSubstitute.
+- SSE (`text/event-stream`) para eventos globais e por thread.
+- MCP server com `ModelContextProtocol` SDK .NET, transporte Stdio/SSE.
+- CLI `taskctl` como `System.CommandLine` console app.
+- Blazor / .NET MAUI para frontend (fase futura).
+
+### Relevant files or directories
+
+```text
+/.specs/                 # Specs unificados
+/.claude/                # Harness Claude
+/.devin/                 # Configuração Devin
+/.agent/                 # Agent Skills
+/docs/                   # Documentação en-us/pt-br
+/.github/workflows/      # GitHub Actions
+/src/
+  Taskboard.Domain/
+  Taskboard.EntityFrameworkCore/
+  Taskboard.Server/
+  Taskboard.Cli/
+  Taskboard.Mcp/
+  Taskboard.AiChat/
+  Taskboard.Cloud/
+  Taskboard.Workflow/
+  Taskboard.Integrations/
+/tests/
+  Taskboard.Tests.Unit/
+  Taskboard.Tests.Integration/
+/skills/
+  manage-taskboard/
+```
+
+### Context files the agent must read before implementation
+
+- `README.md`
+- `.specs/CAPABILITY-MAP.md`
+- `.specs/SPEC-001-domain-model.md`
+- `.specs/SPEC-002-rest-api.md`
+- `.specs/SPEC-011-persistence.md`
+
+---
+
+## 5. Task Definition
+
+### Main task
+
+Migrar a aplicação `taskboard-ai` do stack Node.js/React/SQLite para C# .NET 10, mantendo funcionalidade equivalente, contratos HTTP, CLI, MCP server e Skill.
+
+### Subtasks
+
+- Mapear domínio e entidades (`SPEC-001`).
+- Mapear persistência e schema SQLite (`SPEC-011`).
+- Mapear API REST e server HTTP (`SPEC-002`).
+- Mapear CLI `taskctl` (`SPEC-003`).
+- Mapear MCP server (`SPEC-004`).
+- Mapear IA / chat / workflow workspaces (`SPEC-005`, `SPEC-007`).
+- Mapear cloud e Jira (`SPEC-006`, `SPEC-010`).
+- Mapear Web UI (`SPEC-008`).
+- Mapear Skill de agente (`SPEC-009`).
+- Definir arquitetura, testes, CI/CD e plano de implantação (este SPEC).
+
+### Do not do
+
+- Não modificar o código-fonte Node.js original.
+- Não implementar código C# nesta fase (somente specs e estrutura).
+- Não alterar frontend sem spec dedicada.
+
+---
+
+## 6. Functional Requirements
+
+### FR-001: Compatibilidade de rotas
+
+Todas as rotas HTTP do sistema legado devem ser replicadas no .NET 10 (ver `SPEC-002`).
+
+### FR-002: Compatibilidade de dados
+
+O schema SQLite final do Node.js deve ser reproduzido em EF Core 10 (ver `SPEC-011`).
+
+### FR-003: Compatibilidade de CLI
+
+O CLI `taskctl` .NET deve oferecer os mesmos subcomandos e saída JSON (ver `SPEC-003`).
+
+### FR-004: Compatibilidade MCP
+
+O servidor MCP .NET deve expor as mesmas tools e schemas JSON (ver `SPEC-004`).
+
+### FR-005: Compatibilidade Skill
+
+A skill `manage-taskboard` deve funcionar com o novo `taskctl` .NET e MCP (ver `SPEC-009`).
+
+---
+
+## 7. Business Rules
+
+### BR-001: Local-first
+
+O banco padrão é SQLite local; sincronização cloud e Jira são opcionais.
+
+### BR-002: Não quebrar contratos
+
+Rotas, payloads e códigos de erro HTTP devem ser mantidos ou versionados.
+
+### BR-003: Identificadores estáveis
+
+`TASK-{projectId}-{number}` e `JIRA:{origin}:{key}` permanecem válidos.
+
+### Domain invariants
+
+- O projeto `local` (`全局`) sempre existe após inicialização.
+- Identificadores de tarefas são únicos globalmente.
+
+---
+
+## 8. Domain Modeling
+
+Ver `SPEC-001-domain-model.md` para entidades, value objects, agregados e eventos de domínio.
+
+Resumo dos agregados:
+
+| Aggregate | Responsibility |
+|---|---|
+| Project | Gerencia projetos, labels e numeração de tarefas |
+| Task | Ciclo de vida, status, prioridade, versionamento |
+| Comment | Texto anexado a uma Task |
+| Attachment | Metadados de arquivo anexado |
+| TaskRelation | Ligação entre duas Tasks |
+| WorkflowWorkspace | Configuração JSON de board visual por projeto |
+| AiChatThread | Conversa com agente (runs e events) |
+
+---
+
+## 9. Expected Architecture
+
+### Architectural style
+
+ABP N-Layer / Clean Architecture / Modular Monolith.
+
+### Layers
+
+```text
+Domain
+  Taskboard.Domain.Shared
+  Taskboard.Domain
+Application
+  Taskboard.Application.Contracts
+  Taskboard.Application
+Infrastructure
+  Taskboard.EntityFrameworkCore
+  Taskboard.Mcp
+  Taskboard.Cli
+  Taskboard.Integrations
+Presentation/API
+  Taskboard.Server
+  Taskboard.Blazor (futuro)
+Tests
+  Taskboard.Tests.Unit
+  Taskboard.Tests.Integration
+```
+
+### Allowed dependencies
+
+- `Domain` não depende de nenhuma outra camada.
+- `Application.Contracts` define DTOs e interfaces.
+- `Application` depende de `Domain`.
+- `Infrastructure` implementa contratos do `Application`.
+- `Server` orquestra entrada/saída.
+
+### Forbidden dependencies
+
+- Domain acessando banco, HTTP, filas, cache.
+- Controller contendo regras de negócio.
+- Handler contendo regras complexas de domínio.
+- Repository validando regras de negócio.
+- DTOs vazando para o domínio.
+
+---
+
+## 10. API Contracts
+
+Ver `SPEC-002-rest-api.md`.
+
+Resumo das rotas:
+
+```http
+GET    /health
+GET/PUT /api/client-storage
+GET    /api/local/codex-thread-progress
+GET    /api/local/host-runtime
+GET/PUT /api/local/cloud-session
+GET/POST /api/local/jira-connection
+POST   /api/local/jira-connection/sync
+GET    /api/meta
+GET/POST /api/local/ai/catalog
+GET    /api/local/ai/composer/candidates
+POST   /api/local/ai/composer/rebind
+GET/POST /api/local/ai/threads
+GET/PUT /api/device-workspaces
+GET/PUT /api/workflow-capabilities
+GET/POST /api/projects
+GET/POST/PATCH/DELETE /api/tasks/:id
+POST   /api/tasks/:id/move
+POST   /api/tasks/:id/archive
+POST   /api/tasks/:id/restore
+GET/POST /api/tasks/:id/comments
+GET/POST /api/attachments
+GET    /api/events (SSE)
+```
+
+---
+
+## 11. Application Contracts
+
+Exemplos de commands/queries:
+
+```csharp
+public sealed record CreateProjectCommand(string Id, string Name, string? WorkspacePath) : IRequest<ProjectDto>;
+public sealed record ListProjectsQuery() : IRequest<IReadOnlyList<ProjectDto>>;
+public sealed record CreateTaskCommand(
+    string ProjectId,
+    string Title,
+    string? Description,
+    string Status,
+    string Priority,
+    IReadOnlyList<string> Labels
+) : IRequest<TaskDto>;
+public sealed record UpdateTaskCommand(
+    string TaskId,
+    long Version,
+    TaskPatch Changes,
+    string? ThreadId,
+    ThreadBinding? ThreadBinding,
+    Actor Actor
+) : IRequest<TaskDto>;
+public sealed record MoveTaskCommand(
+    string TaskId,
+    long Version,
+    string Status,
+    double? SortOrder,
+    string? ThreadId,
+    ThreadBinding? ThreadBinding,
+    Actor Actor
+) : IRequest<TaskDto>;
+```
+
+Handlers encapsulam regras de domínio e chamam repositórios.
+
+---
+
+## 12. Persistence and Data
+
+Ver `SPEC-011-persistence.md`.
+
+Entidades persistidas:
+
+| Table | Purpose |
+|---|---|
+| Projects | Projetos |
+| Tasks | Tarefas |
+| Comments | Comentários |
+| TaskActivities | Log de mudanças |
+| Attachments | Anexos |
+| WorkflowWorkspaces | Config JSON do board |
+| ProjectSummaries | Resumos gerados |
+| AiChatThreads | Threads de IA |
+| AiChatRuns | Execuções de IA |
+| AiChatEvents | Eventos de IA |
+| TaskRelations | Relacionamentos |
+
+---
+
+## 13. Integrations
+
+Ver `SPEC-006-cloud.md`, `SPEC-010-integrations.md`.
+
+| Service | Data sent | Data received | Security |
+|---|---|---|---|
+| Jira API | updates de issues | issues, comentários | OAuth/basic token armazenado em secrets |
+| Cloudflare D1/R2 | dados sincronizados | dados remotos | Token de API Cloudflare |
+| AI Models (OpenAI/Claude) | prompts, contexto | respostas, ações | API key, sandbox read-only/write |
+
+---
+
+## 14. Edge Cases and Error Scenarios
+
+| Scenario | Input | Expected behavior |
+|---|---|---|
+| Projeto duplicado | POST /api/projects com id existente | 409 PROJECT_EXISTS |
+| Tarefa não encontrada | GET /api/tasks/invalid | 404 TASK_NOT_FOUND |
+| Conflito de versão | PATCH com version desatualizado | 409 VERSION_CONFLICT |
+| Jira offline | sync forçado | 502 JIRA_RECONCILE_FAILED |
+| Arquivo inexistente | GET /api/attachments/invalid | 404 ATTACHMENT_NOT_FOUND |
+
+---
+
+## 15. Few-Shot Examples
+
+### Example 1: Criar projeto
+
+**Input:**
+
+```json
+POST /api/projects
+{
+  "id": "my-project",
+  "name": "My Project",
+  "workspacePath": "/home/user/my-project"
+}
+```
+
+**Expected output:**
+
+```json
+{
+  "project": {
+    "id": "my-project",
+    "name": "My Project",
+    "workspacePath": "/home/user/my-project",
+    "labels": ["缺陷", "特性", "for-claude", "hold", "改进", "phase-1", "phase-2", "phase-3", "phase-4", "phase-5", "phase-6"],
+    "issueCount": 0,
+    "createdAt": "2026-08-24T01:53:00Z",
+    "updatedAt": "2026-08-24T01:53:00Z"
+  }
+}
+```
+
+### Example 2: Build and run
 
 ```bash
-# Build e run do serviço
 dotnet build src/Taskboard.Server
 dotnet run --project src/Taskboard.Server
-
-# CLI
 dotnet run --project src/Taskboard.Cli -- project create --id my-project --name "My" --workspace-path /abs/path
-dotnet run --project src/Taskboard.Cli -- issue list --project my-project --json
-
-# MCP server (stdio)
-dotnet run --project src/Taskboard.Mcp
-
-# Testes
 dotnet test
-
-# Lint (editorconfig + analisadores)
 dotnet build /warnaserror
 ```
 
-Variáveis de ambiente (paridade com o original):
-`CODEX_TASKBOARD_HOST` (default `0.0.0.0`), `CODEX_TASKBOARD_PORT` (47823),
-`CODEX_TASKBOARD_DATA_DIR` (`.data`), `CODEX_TASKBOARD_URL`,
-`TASKBOARD_THREAD_ID`, `CODEX_THREAD_ID`, `CODEX_TASKBOARD_COMPANION_URL`.
+---
 
-## Project Structure (alvo)
+## 16. Non-Functional Requirements
 
-```
-src/
-  Taskboard.Domain/        → entidades, enums (TASK_STATUSES, TASK_PRIORITIES), regras
-  Taskboard.Persistence/  → DbContext / SqliteConnection, migrações, repositórios
-  Taskboard.Server/       → ASP.NET Core, Program.cs, endpoints /api/*, SSE, auth
-  Taskboard.Cli/          → equivalente a taskctl (console)
-  Taskboard.Mcp/          → servidor MCP (ModelContextProtocol)
-  Taskboard.AiChat/       → subsystem de chat AI local (threads/runs/eventos)
-  Taskboard.Cloud/        → companion loopback + proxy
-  Taskboard.Workflow/     → motor de grafo de workflow + automação
-  Taskboard.Integrations/ → Jira, DeepSeek
-tests/
-  Taskboard.Tests.Unit/
-  Taskboard.Tests.Integration/   → WebApplicationFactory + CLI
-skills/
-  manage-taskboard/       → SKILL.md (portado 1:1) + references/cli.md
-.specs/                   → este conjunto de specs
-```
+### Performance
 
-## Code Style
+- P95 < 300ms para operações de leitura.
+- Sync Jira < 30s para boards medianos.
 
-- `file-scoped namespace`, `primary constructors` (C# 12+), `collection expressions`.
-- Injeção de dependência via `IServiceCollection`; handlers como `static`
-  Minimal API ou classes `EndpointGroup`.
-- Nomes de campos/rotas **exatos** do sistema-fonte (ex.: `identifier`,
-  `sort_order`, `thread_id`, `/api/tasks`). Enums em inglês minúsculo.
-- Exemplo (endpoint Minimal API):
+### Security
 
-```csharp
-app.MapGet("/api/projects", (ProjectRepository repo) =>
-    Results.Ok(new { projects = repo.ListProjects() }));
+- Não logar tokens, senhas ou dados pessoais.
+- Validar autorização antes de acessar recursos.
+- Sanitizar descrições e comentários (DOMPurify equivalente).
 
-app.MapPost("/api/tasks", async (CreateTaskRequest body, TaskService svc) =>
-{
-    var task = await svc.CreateAsync(body);
-    return Results.Created($"/api/tasks/{task.Id}", task);
-});
-```
+### Observability
 
-- Tratamento de erro: `ApiError(code, message, details?)` → JSON no stderr (CLI)
-  ou corpo HTTP `{ error: { code, message } }` (API). Códigos: `VERSION_CONFLICT` (409),
-  `UNKNOWN_QUERY_PARAMETER` (400), `INVALID_CLOUD_URL`, etc.
+- Structured logs com `ILogger`.
+- Métricas de sucesso, erro e latência.
+- Tracing para chamadas externas.
+- CorrelationId no fluxo de requisições.
 
-## Testing Strategy
+### Reliability
 
-- **Unit**: regras de domínio (transições de status, validação de labels,
-  `threadBinding`, concorrência `version`).
-- **Integration**: `WebApplicationFactory` dispara a API real; cobre cada rota
-  de `SPEC-002` com payloads exatos; verifica SSE e 409 em update concorrente.
-- **CLI**: subprocess chama `Taskboard.Cli` e valida envelope JSON + exit codes.
-- **MCP**: cliente in-process lista/invoca tools e compara com `SPEC-004`.
-- Cobertura mínima: 80% dos paths de mutação de `tasks`/`comments`.
+- Cancellation tokens respeitados.
+- Timeouts para chamadas externas.
+- Transações para persistência.
+- Idempotência em comandos de sync.
 
-## Boundaries
+---
 
-- **Always**: manter paridade de contrato da API (nomes, campos, códigos de erro);
-  usar `version` otimista em toda mutação de `tasks`/`comments`; persistir anexos
-  em disco fora do DB; validar entrada (títulos ≤240, labels ≤20×64, etc.).
-- **Ask first**: trocar SQLite por outro banco; mudar modelo de auth (LAN sem
-  auth → decidir se mantém); adicionar dependências (ex.: EF Core vs raw);
-  alterar a superfície MCP.
-- **Never**: commitar secrets/`.data`; expor dados de device (paths absolutos)
-  em modo cloud; quebrar compatibilidade da CLI/Skill existentes; gravar em dois
-  bancos (local + cloud) simultaneamente.
+## 17. Mandatory Guardrails
 
-## Success Criteria
+- Do not invent requirements.
+- Do not create a new architecture without justification.
+- Do not modify a public contract without documenting the breaking change.
+- Do not remove or ignore existing tests.
+- Do not add a library without an explicit need.
+- Do not place business rules in controllers.
+- Do not access infrastructure directly from the domain layer.
+- Do not expose secrets, tokens, personal data, or regulated data in logs.
+- Do not deploy, push, or merge automatically.
+- Do not modify CI/CD pipelines unless this SPEC has a dedicated section for it.
+- Do not expand the scope with opportunistic improvements.
+- Stop and request human review when there is critical ambiguity.
 
-- [ ] `GET /api/projects`, `POST /api/tasks`, `POST /api/tasks/:id/move`, etc.
-  respondem com os mesmos corpos do original (IDs, campos computados, `version`).
-- [ ] SQLite em `.data/taskboard.sqlite` com schema equivalente às 8+ tabelas.
-- [ ] SSE em `/api/events` emite os 12 tipos de evento; `/api/local/ai/threads/:id/events` por thread.
-- [ ] `Taskboard.Cli` replica os comandos de `SPEC-003` com os mesmos exit codes.
-- [ ] `Taskboard.Mcp` expõe os 13 tools de `SPEC-004` via Stdio.
-- [ ] Skill `manage-taskboard` funciona com o novo serviço sem alteração de conteúdo.
-- [ ] Update concorrente retorna 409 `VERSION_CONFLICT` com `{expectedVersion, actualVersion}`.
+---
 
-## Open Questions (resolvidas)
+## 18. Expected Tests
 
-1. **EF Core ou raw?** → **Raw `Microsoft.Data.Sqlite`** (paridade 1:1 das migrações e lock `version`).
-2. **Cloud no MVP?** → **Só companion local loopback**; Cloudflare D1/R2 é deployment opcional posterior.
-3. **Frontend?** → **Reescrito em Blazor (.NET MAUI para desktop)** — ver `SPEC-011-frontend-blazor.md`. App React original não é reutilizado.
-4. **Workflow/automation no MVP?** → **Sim**, incluído (`SPEC-007`).
-5. **Transporte MCP?** → **Chama a API HTTP direto** (não spawn do CLI) — confirmado em `SPEC-004`.
+### Unit tests
+
+| Class | Scenarios |
+|---|---|
+| Project | criação, numeração, labels |
+| Task | mudança de status, versionamento, prioridade |
+| TaskRelation | parent, blocks, related |
+
+### Integration tests
+
+| Flow | Validation |
+|---|---|
+| POST /api/projects | 201 Created |
+| GET /api/projects | retorna lista |
+| POST /api/tasks | cria com identifier correto |
+| PATCH /api/tasks/:id | version conflict 409 |
+
+---
+
+## 19. Acceptance Criteria
+
+- [ ] Todos os specs de migração foram criados.
+- [ ] Arquitetura .NET 10 ABP N-Layer foi definida.
+- [ ] Contratos HTTP mapeados sem ambiguidade.
+- [ ] Domínio e persistência mapeados.
+- [ ] CLI, MCP e Skill mapeados.
+- [ ] Plano de testes definido.
+- [ ] Riscos e rollback documentados.
+
+---
+
+## 20. Implementation Plan
+
+### Step 1: Discovery
+
+- [x] Ler arquivos contexto.
+- [x] Identificar arquitetura atual.
+- [x] Extrair schema, rotas, CLI, MCP.
+
+### Step 2: Technical design
+
+- [ ] Definir classes de domínio.
+- [ ] Definir commands/queries.
+- [ ] Definir contratos API.
+- [ ] Definir repositórios.
+- [ ] Definir migrations.
+
+### Step 3: Implementation
+
+- [ ] Implementar domínio.
+- [ ] Implementar aplicação.
+- [ ] Implementar infraestrutura EF Core + SQLite.
+- [ ] Implementar HttpApi.
+- [ ] Implementar CLI.
+- [ ] Implementar MCP server.
+- [ ] Implementar Skill.
+
+### Step 4: Tests
+
+- [ ] Domain tests.
+- [ ] Application tests.
+- [ ] Integration tests.
+- [ ] Contract tests.
+
+### Step 5: Final validation
+
+- [ ] Build.
+- [ ] Tests.
+- [ ] Review arquitetura.
+- [ ] Documentação.
+
+---
+
+## 21. Rollback Strategy
+
+### When to trigger rollback
+
+- Erro 5xx aumentado.
+- Quebra de contrato.
+- Inconsistência de dados.
+
+### How to revert
+
+- Reverter branch.
+- Restaurar backup do SQLite.
+- Reduzir feature flag.
+
+### Expected evidence
+
+- Logs.
+- Métricas.
+- Smoke tests.
+
+---
+
+## 22. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---:|---|
+| Diferença semântica entre `node:sqlite` e EF Core | Médio | Média | Mapear tipos SQL, testar migrations |
+| MCP SDK .NET ainda em evolução | Médio | Baixa | Usar versão estável ou implementar server STDIO/SSE manual |
+| Perda de funcionalidade de AI chat | Alto | Média | Especificar detalhadamente (`SPEC-005`) |
+| CLI `taskctl` complexo | Médio | Média | Decompor em subcomandos (`SPEC-003`) |
+
+---
+
+## 23. Definition of Done
+
+- [ ] SPEC revisado.
+- [ ] Implementação segue o SPEC.
+- [ ] Testes automatizados criados.
+- [ ] Build validado.
+- [ ] Contratos preservados ou versionados.
+- [ ] Observabilidade implementada.
+- [ ] Documentação atualizada.
+- [ ] PR descreve mudanças, riscos e evidências.
+- [ ] Nenhum TODO crítico no código.
+- [ ] Nenhuma decisão arquitetural implícita.
+
+---
+
+## 24. Key Reminder
+
+> The SPEC is the contract.  
+> The agent must not optimize, expand, or reinterpret the scope.  
+> In case of ambiguity, the agent must stop, make the uncertainty explicit, and propose technical options with impact, risk, and recommendation.
+
+---
+
+## Pending Questions and Ambiguities
+
+1. Frontend: manter React/Vite servido estaticamente ou reimplementar em Blazor/MAUI?
+2. Banco padrão em produção: SQLite, PostgreSQL ou SQL Server?
+3. Empacotamento desktop (MAUI/WinUI) nesta fase?
+4. Servidor MCP: transporte padrão STDIO, SSE ou ambos?
+
+## Human Approval Checklist
+
+- [ ] O problema de negócio está claro.
+- [ ] O resultado esperado é mensurável.
+- [ ] O escopo e fora de escopo são explícitos.
+- [ ] Requisitos funcionais são testáveis.
+- [ ] Regras de negócio estão completas o suficiente.
+- [ ] Modelo de domínio está alinhado ao bounded context.
+- [ ] Contratos API são explícitos.
+- [ ] Casos de borda listados.
+- [ ] Requisitos não-funcionais definidos.
+- [ ] Guardrails claros.
+- [ ] Testes necessários claros.
+- [ ] Estratégia de rollback definida.
+- [ ] Riscos e mitigações documentados.
+- [ ] Ambiguidades resolvidas ou aceitas.

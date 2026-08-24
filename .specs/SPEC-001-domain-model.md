@@ -1,130 +1,573 @@
-# Spec: Domain Model & Persistence (module `domain-model`, `persistence`)
+# SPEC-001: Domain Model
 
-Descreve o modelo de dados atual do `dashi-taskboard`, fonte para o clone em .NET.
-Storage: **SQLite** (`node:sqlite` `DatabaseSync`), modo WAL, `PRAGMA foreign_keys=ON`.
-Timestamps em **ISO-8601 string**; IDs em `randomUUID()` (exceto `identifier` humano
-`PREFIX-N`). Anexos: bytes em disco em `<dataDir>/attachments/<id>`.
+## 0. SPEC Metadata
 
-## Entidades (mapear para tabelas/classes .NET)
+| Field | Value |
+|---|---|
+| Feature name | Domain Model |
+| Product / System | taskboard-ai |
+| Module / Bounded Context | Taskboard Core |
+| Change type | Migration / Design |
+| Repository | afonsoft/taskboard-ai |
+| Suggested branch | `devin/spec-domain-net10` |
+| Technical owner | afonsoft |
+| Status | Draft |
+| Date | 2026-08-24 |
+| Target agent | Devin |
 
-### `projects`
-| coluna | tipo | notas |
+---
+
+## 1. Executive Summary
+
+### Problem
+
+O domínio atual em `shared/domain.mjs` e `server/database.mjs` define statuses, prioridades, projetos, tarefas, labels, comentários, anexos, relacionamentos, atividades, workflow workspaces e chat de IA. A migração para .NET 10 deve reproduzir esse domínio com tipos fortes, validações e eventos de domínio.
+
+### Objective
+
+Projetar o modelo de domínio C# para `Project`, `Task`, `Comment`, `Attachment`, `TaskRelation`, `TaskActivity`, `WorkflowWorkspace` e `AiChatThread`, refletindo fielmente o schema e regras do Node.js.
+
+### Expected outcome
+
+Classes de domínio imutáveis/seguras, rich models, value objects para `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `AttachmentKind`, `RelationType`.
+
+### Out of scope
+
+- Implementação de controllers/handlers nesta spec (ver `SPEC-002`).
+- Persistência EF Core (ver `SPEC-011`).
+
+---
+
+## 2. Agent Role
+
+> You are a senior C# domain modeler using DDD, .NET 10, ABP N-Layer, and Clean Architecture.
+
+### Expected behavior
+
+- Model aggregates with clear invariants.
+- Use value objects for type-safe enumerations.
+- Publish domain events for state changes.
+- Keep the domain layer free of infrastructure concerns.
+
+---
+
+## 3. Agent Autonomy Level
+
+### Selected level
+
+3
+
+### Restrictions
+
+- Não alterar contratos HTTP.
+- Não introduzir tipos sem justificativa.
+- Não referenciar EF Core no Domain project.
+
+---
+
+## 4. Product Context
+
+### Functional context
+
+O Taskboard agrupa tarefas em projetos. Cada projeto mantém contador sequencial `next_task_number`, labels próprios e path do workspace. Tarefas transitam pelos status: `backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`, `canceled`. Comentários, anexos e relacionamentos (parent/blocks/related) enriquecem a colaboração. Workspaces de workflow e chat de IA estendem a plataforma.
+
+### Technical context
+
+Atualmente os estados são constantes JS em `shared/domain.mjs`. O `database.mjs` usa SQLite `CHECK` constraints.
+
+### Relevant stack
+
+- .NET 10, C# 14
+- ABP N-Layer Domain module
+- xUnit + Shouldly + NSubstitute
+
+---
+
+## 5. Task Definition
+
+### Main task
+
+Criar o modelo de domínio C# equivalente ao domínio Node.js.
+
+### Subtasks
+
+- Value objects: `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `ProjectId`, `TaskId`, `CommentId`, `AttachmentId`, `AttachmentKind`, `RelationType`.
+- Aggregates: `Project`, `Task`, `AiChatThread`.
+- Entities: `Comment`, `Attachment`, `TaskRelation`, `TaskActivity`, `WorkflowWorkspace`, `ProjectSummary`, `AiChatRun`, `AiChatEvent`.
+- Domain events para mutações de tarefa.
+
+### Do not do
+
+- Não criar DTOs nesta camada.
+- Não referenciar EF Core no Domain.
+
+---
+
+## 6. Functional Requirements
+
+### FR-001: Status e prioridades tipadas
+
+**Description:**  
+O domínio deve restringir `TaskStatus` aos valores: `backlog`, `todo`, `in_progress`, `in_review`, `blocked`, `done`, `canceled`.  
+E `TaskPriority` a: `none`, `urgent`, `high`, `medium`, `low`.
+
+**Rules:**
+
+- Status e prioridades são case-sensitive strings.
+- Valores inválidos lançam `DomainException`.
+
+**Inputs:**
+
+| Field | Type | Required | Rule |
+|---|---|---:|---|
+| value | string | yes | dentro do enum permitido |
+
+**Outputs:**
+
+| Field | Type | Description |
 |---|---|---|
-| `id` | TEXT PK | slug lowercase (`local`, `jira-my-tasks`) |
-| `name` | TEXT NOT NULL | |
-| `workspace_path` | TEXT NULL | `local` tem NULL |
-| `labels` | TEXT JSON array | default `DEFAULT_LABEL_NAMES` |
-| `next_task_number` | INTEGER DEFAULT 1 | contador por projeto p/ `identifier` |
-| `created_at`/`updated_at` | TEXT NOT NULL | |
-Campo virtual `issue_count` (count de tasks não-arquivadas). `source` =
-`"jira"` se `id=="jira-my-tasks"` senão `"local"`.
+| status/priority | value object | validado |
 
-### `tasks` (issues)
-`id` UUID PK · `identifier` TEXT UNIQUE (`PREFIX-N`) · `project_id` FK→projects
-· `title` ≤240 NOT NULL · `description` TEXT DEFAULT '' · `status` enum
-`backlog|todo|in_progress|in_review|blocked|done|canceled` · `priority`
-`none|urgent|high|medium|low` · `labels` JSON array (≤20 strings, 1–64 chars)
-· `sort_order` REAL (novo = `min-1000`) · `thread_id` · `thread_codex_project_id`/
-`thread_codex_project_kind`(`local`|`remote`)/`thread_codex_host_id`/
-`thread_workspace_path` · `creator_type`(`user`|`agent`) · `creator_id`
-DEFAULT `local-user` · `creator_name` DEFAULT `本地用户` · `creator_avatar_url` ·
-`assignee_type`/`assignee_id`/`assignee_name`/`assignee_avatar_url` ·
-`workflow_id` · `git_branch` · `worktree_path` · `worktree_branch` ·
-`start_date` · `due_date` (REQUIRED se recurrence) · `recurrence_interval` INTEGER
-· `recurrence_unit`(`day|week|month|year`) · `external_source`(`'jira'`)/
-`external_origin`/`external_id`/`external_key`/`external_url` · `archived_at` ·
-`version` INTEGER DEFAULT 1 CHECK>0 (**concorrência otimista**) ·
-`created_at`/`updated_at`.
+**Acceptance criteria:**
 
-Campos computados (serializar na API):
-- `developmentContext`: `{type:'worktree',path,branch}` | `{type:'branch',branch}` | null.
-- `source`: `jira` se `external_source=='jira'` senão `local`.
-- `recurrence`: `{interval,unit}` | null.
-- `threadBinding`: `{threadId,codexProjectId,codexProjectKind,codexHostId,workspacePath}`
-  se os 5 presentes; senão `legacyLocalThreadId` = `thread_id` puro.
-- `relations`: `parent` (task summary), `subIssues[]`, `blockedBy[]`, `blocks[]`, `related[]`.
+- [ ] Testes Dado/Quando/Então para todos os valores válidos e inválidos.
 
-### `comments`
-`id` UUID PK · `task_id` FK→tasks ON DELETE CASCADE · `body` NOT NULL ·
-`thread_id` + 4 campos de `threadBinding` · `author_type`(`user`|`agent`) ·
-`author_id`/`author_name` NOT NULL · `author_avatar_url` · `version` INTEGER
-DEFAULT 1 CHECK>0 · `created_at`/`updated_at`. Computados: `threadBinding`/
-`legacyLocalThreadId`, `attachments[]`.
+### FR-002: Ciclo de vida da tarefa
 
-### `task_activities` (audit log)
-`id` · `task_id` FK→tasks CASCADE · `actor_type`(`user`|`agent`) ·
-`actor_id`/`actor_name` · `actor_avatar_url` · `changes` JSON array
-`{field,before,after}` · `created_at`.
+**Description:**  
+Uma tarefa pode ser criada, movida entre statuses, atualizada (PATCH), arquivada, restaurada e deletada permanentemente (apenas se arquivada e não Jira).
 
-### `attachments`
-`id` UUID PK · `task_id` FK→tasks CASCADE · `comment_id` FK→comments CASCADE NULL ·
-`kind` CHECK(`inline`|`attachment`) · `filename` NOT NULL · `content_type` NOT NULL
-· `size` INTEGER ≥0 · `created_at`. Bytes em disco (`inline` inferido quando
-imagem embutida no body).
+**Rules:**
 
-### `task_relations` (join)
-PK = `(relation_type, source_task_id, target_task_id)`. `relation_type`
-(`parent`|`blocks`|`related`) · `source_task_id` FK · `target_task_id` FK ·
-`created_at`. Regras: `source != target`; `related` exige `source<target`;
-UNIQUE `task_relations_one_parent` (1 parent por target). `parent` é armazenado
-invertido (child = source, parent = target).
+- Tarefas Jira não podem ser arquivadas/restauradas/deletadas pelo Taskboard.
+- Versão incrementa a cada mutação.
+- `archived_at` null indica ativa.
 
-### `workflow_workspaces`
-`project_id` PK FK · `workspace` TEXT JSON (grafo arbitrário) · `version` INTEGER
-DEFAULT 1 · `updated_at`.
+**Acceptance criteria:**
 
-### `project_summaries`
-`project_id` PK · `summary` TEXT NULL · `generated_at`/`attempted_at` · `error`.
+- [ ] `Task.Move(status, sortOrder)` atualiza status e ordem.
+- [ ] `Task.Archive()` seta `ArchivedAt`.
+- [ ] `Task.Restore()` limpa `ArchivedAt`.
 
-### `ai_chat_threads`
-`id` PK · `title` NOT NULL · `status`(`idle`|`running`|`failed`) ·
-`origin_project_id`/`origin_project_name`/`origin_workspace_path` NOT NULL ·
-`origin_issue_id`/`origin_issue_identifier` · `codex_thread_id` · `model` NOT NULL
-· `reasoning_effort` NOT NULL · `sandbox`(`read-only`|`workspace-write`|
-`danger-full-access`) · `created_at`/`updated_at`. Computados: `origin{...}`,
-`currentRun`, `latestTodo{completed,total,eventId,updatedAt}`.
+### FR-003: Identificadores e numeração
 
-### `ai_chat_runs`
-`id` PK · `thread_id` FK→ai_chat_threads CASCADE · `status`
-(`running`|`completed`|`failed`|`interrupted`) · `exit_code` INTEGER · `error` ·
-`started_at` NOT NULL · `finished_at`. UNIQUE parcial `ai_chat_runs_one_active`
-(1 `running` por thread).
+**Description:**  
+Projeto gera tarefas com identifier `TASK-{projectId}-{number}`. Jira usa `JIRA:{origin}:{externalKey}`.
 
-### `ai_chat_events`
-`id` PK · `thread_id` FK · `run_id` FK · `type` NOT NULL · `role`
-(`user`|`assistant`|`activity`|`error`) · `content` NOT NULL · `data` JSON NULL
-· `created_at`.
+**Rules:**
 
-## Relacionamentos
-tasks→project · comments/activities/attachments→task (CASCADE) · task_relations
-→task×2 · workflow_workspaces & project_summaries→project · ai_chat_runs/events→
-ai_chat_threads.
+- `next_task_number` incrementa de forma atômica.
+- Identificadores são únicos globalmente.
 
-## Migrações (paridade `cloud/migrations/*.sql`)
-1. `0001_initial` (projects, tasks, comments, attachments, relations)
-2. `0002_add_start_date`
-3. `0003_global_project`
-4. `0004_task_activities`
-5. `0005_task_relation_project_integrity`
-6. `0006_project_labels`
-7. `0007_thread_identity` (5 colunas thread_*)
-8. `0008_attachment_kind`
-No .NET: scripts SQL idempotentes applyados na startup (CREATE TABLE IF NOT EXISTS
-+ ALTER ADD COLUMN ignorando duplicado), igual ao `#migrate()` do original.
+**Acceptance criteria:**
 
-## Enums (manter nomes)
-`TASK_STATUSES = [backlog, todo, in_progress, in_review, blocked, done, canceled]`
-`TASK_PRIORITIES = [none, urgent, high, medium, low]`
-`DEFAULT_PROJECT_ID = "local"` · `JIRA_PROJECT_ID = "jira-my-tasks"`
-`DEFAULT_LABEL_NAMES` (12): 缺陷, 特性, for-claude, hold, 改进, phase-1..6.
+- [ ] `Project.GenerateTaskIdentifier()` retorna string correta.
 
-## .NET mapping
-- `Taskboard.Domain`: classes `Project`, `Task`, `Comment`, `TaskActivity`,
-  `Attachment`, `TaskRelation`, `WorkflowWorkspace`, `ProjectSummary`,
-  `AiChatThread`, `AiChatRun`, `AiChatEvent`; records computados
-  `ThreadBinding`, `DevelopmentContext`, `TaskRelations`, `Recurrence`.
-- `Taskboard.Persistence`: `DbContext` (EF Core) **ou** `SqliteConnection` +
-  DAL. Recomendado **raw `Microsoft.Data.Sqlite`** p/ paridade exata das migrações
-  e do `version` optimistic lock (`UPDATE ... WHERE id=@id AND version=@version`).
-- Anexos: `<DataDir>/attachments/<id>` (sem DB). `DataDir` default `.data`,
-  override via `CODEX_TASKBOARD_DATA_DIR`.
+### FR-004: Comentários
+
+**Description:**  
+Comentário pertence a uma `Task`, possui `body`, `author` (`Actor`), opcional `thread_id`.
+
+**Rules:**
+
+- Body não pode ser vazio após trim.
+- Deleção remove comentário e anexos vinculados (cascata).
+
+### FR-005: Anexos
+
+**Description:**  
+Upload de arquivos para tarefa ou comentário; metadados: `id`, `task_id`, `comment_id`, `kind` (`inline`/`attachment`), `filename`, `content_type`, `size`, `path`.
+
+**Rules:**
+
+- `size` >= 0.
+- `kind` = `inline` ou `attachment`.
+
+### FR-006: Relacionamentos
+
+**Description:**  
+Relacionamentos entre tarefas: `parent`, `blocks`, `related`.
+
+**Rules:**
+
+- `source_task_id` != `target_task_id`.
+- `related` exige `source < target` lexicograficamente para unicidade.
+- Apenas um `parent` por tarefa filha (target).
+- Deleção cascata quando tarefa é removida.
+
+### FR-007: Atividades
+
+**Description:**  
+Registro imutável de mudanças em tarefas com `actor`, `changes` JSON e timestamp.
+
+**Rules:**
+
+- Criado automaticamente em create/update/move/archive/restore/delete.
+- `changes` é JSON com campos alterados.
+
+### FR-008: Workflow Workspace
+
+**Description:**  
+Configuração JSON de board visual por projeto.
+
+### FR-009: AI Chat
+
+**Description:**  
+Threads de conversa com runs e events.
+
+**Rules:**
+
+- Thread possui runs e events.
+- Status permitidos: `idle`, `running`, `failed`.
+- Sandbox: `read-only`, `workspace-write`, `danger-full-access`.
+
+---
+
+## 7. Business Rules
+
+### BR-001: Status fixos
+
+Apenas os sete status definidos são aceitos.
+
+### BR-002: Prioridades fixas
+
+Apenas as cinco prioridades definidas são aceitas.
+
+### BR-003: Versão otimista
+
+Cada mutação incrementa `version`. PATCH requer `version` e falha em conflito.
+
+### BR-004: Tarefas arquivadas imutáveis
+
+Tarefas arquivadas não podem ser atualizadas nem movidas. Devem ser restauradas primeiro.
+
+### BR-005: Projeto local global
+
+Existe sempre o projeto `local` com nome `全局` e `workspacePath` null.
+
+### BR-006: Anexos pertencem a tarefas
+
+Attachment sempre vinculado a uma Task; opcionalmente a um Comment.
+
+### BR-007: Parent único
+
+Uma tarefa target só pode ter um parent.
+
+### BR-008: Related simétrico
+
+`related` é não-direcional; `source < target` garante unicidade.
+
+### Domain invariants
+
+- Task `project_id` não muda.
+- `TaskRelation` não permite auto-relacionamento nem `related` duplicado invertido.
+- Cada tarefa só pode ter um pai (`parent`).
+- Um projeto não pode ser removido se houver tarefas ativas não-arquivadas.
+- `next_task_number` nunca decrementa.
+
+---
+
+## 8. Domain Modeling
+
+### Bounded Context
+
+Taskboard Core
+
+### Aggregates
+
+| Aggregate | Responsibility | Invariants |
+|---|---|---|
+| Project | Gerencia projetos, labels e numeração de tarefas | `next_task_number` crescente |
+| Task | Ciclo de vida, atributos, versionamento | status válido, version > 0 |
+| AiChatThread | Gerencia runs e events | status válido |
+
+### Entities
+
+| Entity | Identity | Responsibility |
+|---|---|---|
+| Comment | CommentId | Texto e metadados |
+| Attachment | AttachmentId | Metadados de arquivo |
+| TaskRelation | composto | Relacionamento |
+| TaskActivity | TaskActivityId | Log de mudanças |
+| WorkflowWorkspace | ProjectId | Config JSON de board visual |
+| ProjectSummary | ProjectId | Resumo gerado |
+| AiChatRun | RunId | Execução |
+| AiChatEvent | EventId | Evento |
+
+### Value Objects
+
+| Value Object | Fields | Validations |
+|---|---|---|
+| TaskStatus | string Value | in TASK_STATUSES |
+| TaskPriority | string Value | in TASK_PRIORITIES |
+| Actor | Type, Id, Name, AvatarUrl | Type in ('user','agent') |
+| Recurrence | Interval, Unit | Unit in ('day','week','month','year') |
+| TaskIdentifier | string Value | formato correto, único |
+| ProjectId | string Value | <=128 chars |
+| TaskId | string Value | <=128 chars |
+| AttachmentKind | string | 'inline' ou 'attachment' |
+| RelationType | string | 'parent','blocks','related' |
+
+### Domain Events
+
+| Event | When it occurs | Payload |
+|---|---|---|
+| TaskCreatedDomainEvent | Após criação | TaskId, ProjectId |
+| TaskMovedDomainEvent | Após move | TaskId, OldStatus, NewStatus |
+| TaskUpdatedDomainEvent | Após patch | TaskId, ChangedFields |
+| TaskArchivedDomainEvent | Após archive | TaskId |
+| TaskRestoredDomainEvent | Após restore | TaskId |
+| ProjectLabelsUpdatedDomainEvent | Após novo label | ProjectId |
+| CommentAddedDomainEvent | Após novo comentário | TaskId, CommentId |
+
+### Expected C# style
+
+```csharp
+public sealed class Project : AggregateRoot<ProjectId>
+{
+    private readonly List<string> _labels = new();
+    public string Name { get; private set; }
+    public string? WorkspacePath { get; private set; }
+    public IReadOnlyCollection<string> Labels => _labels.AsReadOnly();
+    public long NextTaskNumber { get; private set; } = 1;
+    // factory, methods...
+}
+
+public sealed class Task : AggregateRoot<TaskId>
+{
+    private TaskStatus _status;
+    public TaskStatus Status => _status;
+    public TaskPriority Priority { get; private set; }
+    public string Title { get; private set; }
+    public string? Description { get; private set; }
+    public long Version { get; private set; } = 1;
+    public DateTime? ArchivedAt { get; private set; }
+    public ProjectId ProjectId { get; private set; }
+    public TaskIdentifier Identifier { get; private set; }
+
+    public void Move(TaskStatus newStatus, double? sortOrder, Actor actor)
+    {
+        if (ArchivedAt.HasValue) throw new DomainException("Archived tasks cannot be moved.");
+        var old = _status;
+        _status = newStatus;
+        if (sortOrder.HasValue) SortOrder = sortOrder.Value;
+        Version++;
+        AddDomainEvent(new TaskMovedDomainEvent(Id, old.Value, newStatus.Value));
+    }
+}
+```
+
+---
+
+## 9. Expected Architecture
+
+ABP Domain layer: `Taskboard.Domain` project.
+
+- `AggregateRoot<T>` base from ABP.
+- `DomainService` only for cross-aggregate logic.
+- `DomainException` for invariant violations.
+
+---
+
+## 10. API Contracts
+
+Ver `SPEC-002-rest-api.md`.
+
+---
+
+## 11. Application Contracts
+
+```csharp
+public sealed record CreateTaskCommand(
+    ProjectId ProjectId,
+    string Title,
+    string? Description,
+    string Status,
+    string Priority,
+    IReadOnlyList<string> Labels,
+    string? ThreadId,
+    ThreadBinding? ThreadBinding,
+    Actor Creator
+) : IRequest<TaskDto>;
+
+public sealed record AddCommentCommand(
+    TaskId TaskId,
+    string Body,
+    Actor Author,
+    ThreadBinding? Thread
+) : IRequest<CommentDto>;
+
+public sealed record CreateRelationCommand(
+    TaskId SourceTaskId,
+    TaskId TargetTaskId,
+    RelationType Type
+) : IRequest;
+```
+
+---
+
+## 12. Persistence and Data
+
+Ver `SPEC-011-persistence.md`.
+
+Tabelas/entidades:
+
+- `projects`
+- `tasks`
+- `comments`
+- `task_activities`
+- `attachments`
+- `workflow_workspaces`
+- `project_summaries`
+- `ai_chat_threads`
+- `ai_chat_runs`
+- `ai_chat_events`
+- `task_relations`
+
+---
+
+## 13. Integrations
+
+Nenhuma externa no domínio.
+
+---
+
+## 14. Edge Cases and Error Scenarios
+
+| Scenario | Input | Expected behavior |
+|---|---|---|
+| Status inválido | "invalid" | DomainException |
+| Mover tarefa arquivada | task.ArchivedAt != null | DomainException |
+| Versão conflito | version != current | VersionConflictException |
+| Comentário vazio | "" | DomainException |
+| Anexo tamanho negativo | size=-1 | DomainException |
+| Relacionamento consigo | source==target | DomainException |
+| Segundo parent | parent já existe para target | DomainException |
+
+---
+
+## 15. Few-Shot Examples
+
+### Exemplo: criação de tarefa
+
+```csharp
+var project = Project.Create(ProjectId.From("my-project"), "My Project");
+var task = Task.Create(
+    TaskId.NewGuid(),
+    project.NextTaskIdentifier(),
+    project.Id,
+    "Nova feature",
+    TaskStatus.Todo,
+    TaskPriority.High,
+    new[] { "特性" },
+    Actor.LocalUser()
+);
+task.Identifier.Value.ShouldBe("TASK-my-project-1");
+```
+
+### Exemplo: upload de anexo
+
+```csharp
+await mediator.Send(new UploadAttachmentCommand(
+    TaskId.From("task-1"),
+    null,
+    stream,
+    "diagrama.png",
+    "image/png",
+    stream.Length
+));
+```
+
+---
+
+## 16. Non-Functional Requirements
+
+- Value objects imutáveis.
+- Domain events testáveis.
+- Sem `DateTime.Now` direto; usar `IClock` do ABP.
+
+---
+
+## 17. Mandatory Guardrails
+
+- Domain não acessa infraestrutura.
+- Sem `DateTime.Now` direto; usar `IClock` do ABP.
+- Não criar DTOs no Domain project.
+- Não referenciar EF Core no Domain project.
+
+---
+
+## 18. Expected Tests
+
+| Class | Scenarios |
+|---|---|
+| TaskStatus | valores válidos/inválidos |
+| TaskPriority | valores válidos/inválidos |
+| Project | numeração, labels |
+| Task | criação, move, archive, restore, versionamento |
+| TaskRelation | parent único, related simétrico |
+| Comment | body vazio, thread_id |
+| Attachment | kind, size |
+
+---
+
+## 19. Acceptance Criteria
+
+- [ ] Todos os value objects testados.
+- [ ] Regras de tarefas Jira testadas.
+- [ ] Eventos de domínio publicados corretamente.
+- [ ] Invariants de relacionamentos testados.
+
+---
+
+## 20. Implementation Plan
+
+1. Criar value objects.
+2. Criar aggregates Project, Task e AiChatThread.
+3. Criar entities Comment, Attachment, TaskRelation, TaskActivity, WorkflowWorkspace, ProjectSummary, AiChatRun, AiChatEvent.
+4. Criar domain events.
+5. Escrever domain tests Dado/Quando/Então.
+
+---
+
+## 21. Rollback Strategy
+
+- Reverter para modelos anteriores se quebrar contrato.
+- Restaurar backup do SQLite em caso de inconsistência.
+
+---
+
+## 22. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---:|---|
+| Diferença de semântica entre JS dinâmico e C# tipado | Médio | Média | Mapear tipos explicitamente |
+| `next_task_number` concorrência em SQLite | Médio | Média | Usar transação serializável ou row lock |
+
+---
+
+## 23. Definition of Done
+
+- [ ] Domain model testado e aprovado.
+- [ ] SPEC revisado.
+- [ ] Nenhuma dependência de infraestrutura no Domain.
+
+---
+
+## 24. Key Reminder
+
+> The SPEC is the contract.
+
+## Pending Questions
+
+1. Os identificadores devem permanecer como string ou usar UUIDs internamente?
+2. `sort_order` usa double ou decimal para evitar imprecisão?
+3. `ProjectId` e `TaskId` devem permitir slugs customizados ou sempre GUID?
+
+## Human Approval Checklist
+
+- [ ] Modelo de domínio está alinhado ao bounded context.
+- [ ] Agregados e entidades identificados.
+- [ ] Invariants documentados.
+- [ ] Value objects testáveis.
+- [ ] Eventos de domínio mapeados.

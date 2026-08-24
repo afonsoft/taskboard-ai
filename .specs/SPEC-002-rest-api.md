@@ -1,108 +1,482 @@
-# Spec: REST API (module `rest-api`)
+# SPEC-002: REST API
 
-Descreve o servidor HTTP atual do `dashi-taskboard` (`server/app.mjs`): servidor
-`node:http` customizado, roteamento manual por `url.pathname` (sem framework de
-rotas), sob prefixo `/api/`. Fonte para o clone ASP.NET Core Minimal APIs.
+## 0. SPEC Metadata
 
-## Transporte & middlewares
-- `createTaskboardServer()` → `http.createServer`. Lista em `0.0.0.0:47823`
-  (override `CODEX_TASKBOARD_HOST`/`PORT`). `GET /health` público.
-- **CORS**: só `TRUSTED_EMBED_ORIGINS` + `origin==='null'` quando instance-token presente.
-- **Auth (LAN/local)**: instance token via headers `x-codex-taskboard-challenge`
-  + `x-codex-taskboard-proof` (HMAC-SHA256 do challenge com `instanceSecret`).
-- **Loopback obrigatório** para `/api/local/*` e `/api/local/ai/*`
-  (`assertLoopbackRequest`/`assertAiLoopbackRequest`).
-- **Cloud**: se `cloudConfig.remoteUrl` setado, rotas `/api/` não-companion são
-  **proxied** para upstream via `cloudProxy.forward` (modo nuvem não faz fallback local).
-- **Actor resolution** (`actorFromRequest`): header `x-taskboard-client: taskctl`
-  → ator agente (`CODEX_AGENT_ACTOR`); senão `x-taskboard-user-id`/`-name`/`-avatar`
-  (URL-encoded, id validado por regex); ausente → default `local-user`/`本地用户`.
+| Field | Value |
+|---|---|
+| Feature name | REST API e Servidor HTTP |
+| Product / System | taskboard-ai |
+| Module / Bounded Context | Taskboard HTTP API |
+| Change type | Migration |
+| Repository | afonsoft/taskboard-ai |
+| Suggested branch | `devin/spec-httpapi-net10` |
+| Technical owner | afonsoft |
+| Status | Draft |
+| Date | 2026-08-24 |
+| Target agent | Devin |
 
-## Roteamento (tabela completa)
+---
 
-| Method | Path | Query | Body | Response |
-|---|---|---|---|---|
-| GET | `/health` | — | — | `{status:"ok"}` (+`product,version,proof` c/ token) |
-| GET/PUT/PATCH | `/api/client-storage` | — | PATCH: merge JSON | GET `{entries}`; PATCH 204 |
-| GET | `/api/local/codex-thread-progress` | `threadId` | — | `{progress}` |
-| GET/PUT | `/api/local/host-runtime` | — | `{threadId,threadRunning,threadTodoProgress,codexProjectId,codexProjectKind,codexHostId,workspacePath}` | `{runtime}` |
-| GET/PUT/DELETE | `/api/local/cloud-session` | — | PUT `{remoteUrl,actorName,sharedKey}` | `{mode,remoteUrl?,actorName?,authenticated}` |
-| GET/PUT | `/api/local/jira-connection` | — | PUT `{baseUrl,username,password,projects}` | `{connection}` |
-| POST | `/api/local/jira-connection/sync` | — | vazio | `{connection}` |
-| PUT | `/api/local/project-mappings/:projectId` | — | `{workspacePath}` | `{projectId,workspacePath}` |
-| GET | `/api/meta` | — | — | `{manageTaskboardSkillPath,capabilities:{localAiChat},mode,realtime:{transport:'poll',intervalMs:2000},localCapabilities}` |
-| GET | `/api/local/ai/catalog` | `projectId` | — | catalog |
-| GET | `/api/local/ai/composer/candidates` | `projectId,threadId,trigger('/'\|'@'),query,surface` | — | candidates |
-| POST | `/api/local/ai/composer/rebind` | — | `{contractVersion:'composer.v1',projectId,threadId,document}` | refs |
-| GET | `/api/local/projects/:id/summary` | — | — | `{projectId,summary,generatedAt,attemptedAt,error}` |
-| GET/POST | `/api/local/ai/threads` | — | POST `{projectId,issueId,title,model,reasoningEffort,sandbox}` | GET `{threads}`; POST 201 `{thread}` |
-| GET | `/api/local/ai/threads/:id/events` | — | — | **SSE** `ai.run`/`ai.event` |
-| POST | `/api/local/ai/threads/:id/turns` | — | `{message,skillIds,dangerFullAccessConfirmed,attachments[]}` (≤25MiB) | 202 `{run}` |
-| POST | `/api/local/ai/threads/:id/compact` | — | vazio | `{thread}` |
-| GET/PATCH/DELETE | `/api/local/ai/threads/:id` | — | PATCH `{title,model,reasoningEffort,sandbox}` | `{thread}`; DELETE 204 |
-| POST | `/api/local/ai/runs/:id/interrupt` | — | vazio | `{run}` |
-| GET | `/api/device-workspaces` | — | — | `{workspaces}` |
-| GET | `/api/workflow-capabilities` | `workspacePath` | — | capabilities |
-| GET/POST | `/api/projects` | — | POST `{id?,name,workspacePath?}` | GET `{projects}`; POST 201 `{project}` |
-| DELETE | `/api/projects/:id` | — | — | 204 (só `temp-*` deletável; 409 se tem tasks; 403 c/c) |
-| POST/DELETE | `/api/projects/:id/labels` | — | `{label}` | `{project}` (409 deletando label JIRA) |
-| GET/PUT | `/api/projects/:id/workflow-workspace` | — | PUT `{version,workspace}` | `{workflow}` |
-| GET | `/api/projects/:id/development-contexts` | `codexProjectId,codexThreadId,workspacePath` | — | contexts |
-| GET/POST | `/api/tasks` | GET `projectId,status,archived('true'\|'false'\|'all')` | POST create (abaixo) | GET `{tasks}`; POST 201 `{task}` |
-| GET/PUT/DELETE | `/api/tasks/:id` | — | PATCH `{version,...}`; DELETE `{version}` | GET `{task}`; PATCH `{task}`; DELETE 204 |
-| POST | `/api/tasks/:id/move` | — | `{version,status,sortOrder?,threadId?,threadBinding?}` | `{task}` |
-| POST | `/api/tasks/:id/archive` · `/restore` | — | `{version,threadId?,threadBinding?}` | `{task}` |
-| POST/DELETE | `/api/tasks/:id/relations/:type/:relatedId` | — | `{version,threadId?,threadBinding?}`; `type∈parent\|blocks\|blocked_by\|related` | `{task,relatedTask}` |
-| GET | `/api/tasks/:id/activities` | — | — | `{activities}` |
-| GET/POST | `/api/tasks/:id/comments` | — | POST `{body,threadId?,threadBinding?}` | GET `{comments}`; POST 201 `{comment}` |
-| PATCH/DELETE | `/api/comments/:id` | — | PATCH `{version,body}`; DELETE `{version}` | `{comment}`; DELETE 204 |
-| GET/POST | `/api/comments/:id/attachments` · `/api/tasks/:id/attachments` | — | POST raw bytes + headers | `{attachments}`/`{attachment}` |
-| GET/HEAD | `/api/attachments/:id/content`·`/download` | — | — | bytes; `inline` se `content`+image |
-| DELETE | `/api/attachments/:id` | — | — | 204 |
-| GET | `/api/events` | — | — | **SSE** global |
+## 1. Executive Summary
 
-## Task create body (`parseTaskCreate`)
-`projectId`(def `local`), `title`(≤240,req), `description`(≤100k),
-`status`(def `backlog`), `priority`(def `none`), `labels`(≤20), `sortOrder`,
-`threadId`, `threadBinding`, `assigneeTarget`(`current-user`|`codex-agent`),
-`workflowId`, `developmentContext`(`{type:'branch',branch}`|
-`{type:'worktree',path,branch}`), `startDate`, `dueDate`,
-`recurrence`(`{interval,unit}`).
+### Problem
 
-## Task PATCH body (`parseTaskPatch`)
-`version`(req) + qualquer de: `projectId,title,description,status,priority,
-labels,workflowId,developmentContext,startDate,dueDate,recurrence,assigneeTarget`.
-`?recurrence` exige `dueDate`.
+O servidor atual `server/app.mjs` (3.300+ linhas) usa `node:http` raw e roteia manualmente para `health`, storage local, projetos, tarefas, eventos SSE, anexos, comentários, workflow, AI e cloud/Jira.
 
-## `threadBinding`
-Todas-ou-nenhuma: `{threadId,codexProjectId,codexProjectKind('local'|'remote'),
-codexHostId,workspacePath}`. Se só `threadId` → `{threadId}` (legacy local).
-`resolveInputThreadBinding` injeta host binding do contexto da requisição quando
-`threadBinding` omitido.
+### Objective
 
-## SSE — EventHub
-- `/api/events`: `EventHub` com `clients:Set<response>`. `connect()` seta
-  `text/event-stream`, 20s keep-alive (`: keep-alive`). `emit(type,value)` →
-  `{type, projectId, taskId, ...value, at:ISO}`.
-  Eventos: `project.created`, `project.labels.updated`, `workflow.updated`,
-  `task.created/updated/moved/archived/restored/deleted`, `task.relation.updated`,
-  `comment.created/updated/deleted`, `attachment.created/deleted`.
-- `/api/local/ai/threads/:id/events`: SSE por thread via `aiChat.subscribe`.
-- **Cloud realtime**: polling-only (`/api/meta` → `realtime:{transport:'poll',intervalMs:2000}`).
+Mapear todos os endpoints HTTP do Node.js para ASP.NET Core Minimal APIs / controllers, preservando rotas, métodos, query params, payloads e códigos de erro.
 
-## Concorrência otimista
-Toda mutação em `tasks`/`comments` exige `version` (int >0). DB:
-`UPDATE ... WHERE id=? AND version=?`; mismatch/row gone → `ApiError(409,
-"VERSION_CONFLICT", {expectedVersion, actualVersion})`. `updateTask` faz
-`version=version+1` e grava `task_activities`. `workflow-workspace` tem seu
-próprio `version` com mesmo 409. CLI passa `--if-version` ou lê `version` antes.
+### Expected outcome
 
-## .NET mapping
-- `WebApplication` + `MapGet/Post/...` em grupos (`/api/projects`, `/api/tasks`,
-  `/api/local/ai/threads`, etc.). Middleware de CORS + instance-token.
-- SSE: `Response.ContentType="text/event-stream"`; loop com `CancellationToken`;
-  hub `ConcurrentDictionary`/Channel para `emit`.
-- Erros: middleware central → `{ error:{ code, message } }` + status; 409 p/
-  `VERSION_CONFLICT` via exceção de domínio `VersionConflictException`.
-- Validação estrita de query params (`assertAllowedQuery`) → 400
-  `UNKNOWN_QUERY_PARAMETER`.
+Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e error codes customizados.
+
+### Out of scope
+
+- Implementação do client frontend (ver `SPEC-008`).
+- Deploy Cloudflare (ver `SPEC-006`, `SPEC-010`).
+
+---
+
+## 2. Agent Role
+
+> Senior ASP.NET Core engineer com experiência em Minimal APIs, SSE, file streaming e ProblemDetails.
+
+### Expected behavior
+
+- Preserve exact route contracts.
+- Map errors to ProblemDetails with custom `code` fields.
+- Implement SSE with correct `text/event-stream` format.
+- Support instance-token auth and CORS.
+
+---
+
+## 3. Agent Autonomy Level
+
+### Selected level
+
+3
+
+### Restrictions
+
+- Não alterar rotas HTTP sem documentar breaking change.
+- Não introduzir autenticação complexa além do token de instância.
+
+---
+
+## 4. Product Context
+
+### Functional context
+
+Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `CODEX_TASKBOARD_PORT` (default `47823`). Serve a SPA estática e expõe API JSON.
+
+### Technical context
+
+- Raw `node:http`.
+- Roteamento manual por `pathname` e regex.
+- SSE em `/api/events`.
+- Anexos como arquivos binários.
+- Erros com `{ error: { code, message, details? } }`.
+
+### Relevant stack
+
+- ASP.NET Core .NET 10
+- Minimal APIs
+- Server-Sent Events (SSE)
+- ProblemDetails
+- `Microsoft.Data.Sqlite`
+
+---
+
+## 5. Task Definition
+
+### Main task
+
+Implementar todos os endpoints HTTP equivalentes.
+
+### Subtasks
+
+- Health e meta.
+- Client storage e local endpoints.
+- Projetos (`/api/projects`).
+- Tarefas (`/api/tasks`).
+- Comentários e anexos.
+- Relacionamentos e atividades.
+- Workflow workspaces e device workspaces.
+- AI catalog/threads/composer.
+- Jira connection.
+- SSE events.
+- Static files fallback.
+
+### Do not do
+
+- Não reimplementar lógica de IA sem `SPEC-005`.
+- Não reimplementar Jira sem `SPEC-010`.
+
+---
+
+## 6. Functional Requirements
+
+### FR-001: Health
+
+**Endpoint:** `GET /health`  
+**Response:** `200 OK` com status e metadata.
+
+### FR-002: Projetos
+
+**Endpoints:**
+
+```http
+GET    /api/projects
+POST   /api/projects
+```
+
+**Regras:**
+
+- GET lista todos com `issueCount`.
+- POST cria com `id`, `name`, `workspacePath`.
+- Projeto `local` sempre inicializado.
+
+### FR-003: Tarefas
+
+**Endpoints:**
+
+```http
+GET    /api/tasks?projectId=&status=&archived=&...
+POST   /api/tasks
+GET    /api/tasks/{id}
+PATCH  /api/tasks/{id}
+DELETE /api/tasks/{id}
+POST   /api/tasks/{id}/move
+POST   /api/tasks/{id}/archive
+POST   /api/tasks/{id}/restore
+GET    /api/tasks/{id}/comments
+POST   /api/tasks/{id}/comments
+PATCH  /api/tasks/{taskId}/comments/{commentId}
+DELETE /api/tasks/{taskId}/comments/{commentId}
+GET    /api/tasks/{id}/activities
+GET    /api/tasks/{id}/relations
+POST   /api/tasks/{id}/relations
+DELETE /api/tasks/{id}/relations/{type}/{targetTaskId}
+```
+
+**Regras:**
+
+- Query params para listagem: `projectId`, `status`, `q`, `assigneeId`, `label`, `archived`, etc.
+- PATCH requer `version` e `changes`.
+- DELETE requer `version` e a tarefa deve estar arquivada e não ser Jira.
+
+### FR-004: Anexos
+
+**Endpoints:**
+
+```http
+POST   /api/attachments
+GET    /api/attachments/{id}/content
+GET    /api/attachments/{id}/download
+DELETE /api/attachments/{id}
+```
+
+### FR-005: SSE Events
+
+**Endpoint:** `GET /api/events`  
+Emite eventos: `task.created`, `task.updated`, `task.moved`, `task.archived`, `task.restored`, `task.deleted`, `comment.added`, `attachment.deleted`.
+
+### FR-006: Local endpoints
+
+```http
+GET/PUT  /api/client-storage
+GET      /api/local/codex-thread-progress
+GET      /api/local/host-runtime
+GET/PUT  /api/local/cloud-session
+GET/POST /api/local/jira-connection
+POST     /api/local/jira-connection/sync
+GET      /api/meta
+GET/POST /api/local/ai/catalog
+GET      /api/local/ai/composer/candidates
+POST     /api/local/ai/composer/rebind
+GET/POST /api/local/ai/threads
+GET/PUT  /api/device-workspaces
+GET/PUT  /api/workflow-capabilities
+```
+
+---
+
+## 7. Business Rules
+
+- Rotas `/api/*` não encontradas retornam `404 NOT_FOUND`.
+- Rotas estáticas fallback para `index.html`.
+- Query params desconhecidos em rotas específicas retornam `400 UNKNOWN_QUERY_PARAMETER`.
+- Métodos não permitidos retornam `405` com `Allow` header.
+- Header `Authorization` contém instance token para endpoints sensíveis.
+
+---
+
+## 8. Domain Modeling
+
+Ver `SPEC-001-domain-model.md`.
+
+---
+
+## 9. Expected Architecture
+
+ASP.NET Core Minimal APIs com `MapGroup` por recurso. Middleware de correlation id e global exception handler retornando ProblemDetails customizado.
+
+### Middleware
+
+- `CorrelationIdMiddleware`
+- `GlobalExceptionHandlerMiddleware` → ProblemDetails
+- `InstanceTokenAuthMiddleware`
+- `CorsMiddleware`
+
+### SSE implementation
+
+```csharp
+app.MapGet("/api/events", async (HttpResponse response, IEventStreamService events, CancellationToken ct) =>
+{
+    response.Headers.ContentType = "text/event-stream";
+    await foreach (var ev in events.SubscribeAsync(ct))
+    {
+        await response.WriteAsync($"event: {ev.Type}\n");
+        await response.WriteAsync($"data: {JsonSerializer.Serialize(ev.Payload)}\n\n");
+        await response.Body.FlushAsync(ct);
+    }
+});
+```
+
+---
+
+## 10. API Contracts
+
+### Listar tarefas
+
+```http
+GET /api/tasks?projectId=local&status=todo&archived=false
+```
+
+Response:
+
+```json
+{
+  "tasks": [ { "id": "...", "identifier": "TASK-local-1" } ],
+  "project": { "id": "local", "name": "全局" }
+}
+```
+
+### Criar tarefa
+
+```http
+POST /api/tasks
+{
+  "projectId": "local",
+  "title": "Implementar login",
+  "description": "...",
+  "status": "todo",
+  "priority": "high",
+  "labels": ["特性"]
+}
+```
+
+### PATCH tarefa
+
+```http
+PATCH /api/tasks/task-123
+{
+  "version": 3,
+  "changes": { "title": "Novo título", "priority": "urgent" }
+}
+```
+
+### Error responses
+
+| Status | Code | Quando |
+|---|---|---|
+| 400 | INVALID_PATH | path malformado |
+| 400 | UNKNOWN_QUERY_PARAMETER | query inesperada |
+| 404 | TASK_NOT_FOUND | tarefa inexistente |
+| 404 | ATTACHMENT_NOT_FOUND | anexo inexistente |
+| 409 | VERSION_CONFLICT | version obsoleto |
+| 409 | PROJECT_EXISTS | projeto duplicado |
+| 409 | JIRA_*_UNAVAILABLE | operações proibidas em Jira |
+| 502 | JIRA_RECONCILE_FAILED | sync falhou |
+| 500 | INTERNAL_ERROR | erro interno |
+
+---
+
+## 11. Application Contracts
+
+```csharp
+public sealed record ListTasksQuery(
+    string? ProjectId,
+    string? Status,
+    bool? Archived,
+    string? Q,
+    string? AssigneeId,
+    string? Label
+) : IRequest<TaskListDto>;
+
+public sealed record GetTaskQuery(TaskId Id) : IRequest<TaskDto>;
+public sealed record CreateTaskCommand(...) : IRequest<TaskDto>;
+public sealed record UpdateTaskCommand(...) : IRequest<TaskDto>;
+public sealed record MoveTaskCommand(...) : IRequest<TaskDto>;
+public sealed record ArchiveTaskCommand(TaskId Id, long Version, string? ThreadId, ThreadBinding? ThreadBinding, Actor Actor) : IRequest<TaskDto>;
+public sealed record RestoreTaskCommand(TaskId Id, long Version, string? ThreadId, ThreadBinding? ThreadBinding, Actor Actor) : IRequest<TaskDto>;
+public sealed record DeleteTaskCommand(TaskId Id, long Version) : IRequest;
+```
+
+---
+
+## 12. Persistence and Data
+
+Ver `SPEC-011-persistence.md`.
+
+---
+
+## 13. Integrations
+
+Ver `SPEC-006-cloud.md`, `SPEC-010-integrations.md`.
+
+---
+
+## 14. Edge Cases and Error Scenarios
+
+| Scenario | Input | Expected behavior |
+|---|---|---|
+| ID muito longo | >128 chars | 400 INVALID_PATH |
+| Query param não esperado | `?foo=bar` em GET /api/tasks/:id | 400 UNKNOWN_QUERY_PARAMETER |
+| Versão errada | version=1 quando current=2 | 409 VERSION_CONFLICT |
+| Tarefa Jira arquivada | source=jira + archive | 409 JIRA_ARCHIVE_UNAVAILABLE |
+| Servidor offline | — | health falha |
+
+---
+
+## 15. Few-Shot Examples
+
+### Exemplo: criação de projeto
+
+```http
+POST /api/projects
+{
+  "id": "my-project",
+  "name": "My Project",
+  "workspacePath": "/home/user/my-project"
+}
+```
+
+Response:
+
+```json
+{
+  "project": {
+    "id": "my-project",
+    "name": "My Project",
+    "workspacePath": "/home/user/my-project",
+    "labels": ["缺陷", "特性", "for-claude", "hold", "改进", "phase-1", "phase-2", "phase-3", "phase-4", "phase-5", "phase-6"],
+    "issueCount": 0,
+    "createdAt": "2026-08-24T01:53:00Z",
+    "updatedAt": "2026-08-24T01:53:00Z"
+  }
+}
+```
+
+---
+
+## 16. Non-Functional Requirements
+
+- P95 < 300ms para operações de leitura.
+- SSE reconnect faz full refresh no cliente.
+- CORS configurado para `http://localhost:5173` em dev.
+- Static files e fallback SPA funcionam.
+
+---
+
+## 17. Mandatory Guardrails
+
+- Não alterar contratos sem versionamento/documentação.
+- Não colocar regras de negócio em endpoints.
+- Não expor dados sensíveis em ProblemDetails.
+- Respeitar cancellation tokens.
+
+---
+
+## 18. Expected Tests
+
+| Flow | Validation |
+|---|---|
+| GET /health | 200 |
+| POST /api/projects | 201 Created |
+| GET /api/projects | retorna lista com local |
+| POST /api/tasks | cria com identifier correto |
+| PATCH /api/tasks/:id | version conflict 409 |
+| GET /api/events | SSE stream funciona |
+| Static files | fallback para index.html |
+
+---
+
+## 19. Acceptance Criteria
+
+- [ ] Todos os endpoints mapeados.
+- [ ] ProblemDetails customizado.
+- [ ] SSE funcional.
+- [ ] CORS e auth por token.
+- [ ] Static files fallback.
+
+---
+
+## 20. Implementation Plan
+
+1. Criar `Taskboard.Server` project.
+2. Configurar Minimal APIs e middleware.
+3. Mapear health, meta, client-storage.
+4. Mapear `/api/projects`.
+5. Mapear `/api/tasks` e sub-recursos.
+6. Mapear `/api/attachments`.
+7. Mapear `/api/events` SSE.
+8. Mapear local endpoints (AI, cloud, Jira, workflow).
+9. Configurar static files e SPA fallback.
+10. Escrever integration tests com `WebApplicationFactory`.
+
+---
+
+## 21. Rollback Strategy
+
+- Reverter branch.
+- Restaurar backup do SQLite.
+- Desabilitar feature flag.
+
+---
+
+## 22. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---:|---|
+| Diferença de roteamento raw vs Minimal APIs | Médio | Média | Testar rotas 1:1 |
+| SSE scaling | Médio | Baixa | In-memory channel para MVP |
+
+---
+
+## 23. Definition of Done
+
+- [ ] SPEC revisado.
+- [ ] Todos os endpoints mapeados.
+- [ ] Tests automatizados.
+- [ ] Build validado.
+
+---
+
+## 24. Key Reminder
+
+> The SPEC is the contract.
+
+## Pending Questions
+
+1. Usar Minimal APIs ou controllers MVC?
+2. Como implementar SSE em produção (`IAsyncEnumerable`, canal, SignalR)?
+3. Static files: servir build Vite existente ou gerar novo?
+
+## Human Approval Checklist
+
+- [ ] Contratos API explícitos.
+- [ ] Códigos de erro mapeados.
+- [ ] SSE e CORS considerados.
+- [ ] Static files e fallback definidos.

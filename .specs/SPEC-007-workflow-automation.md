@@ -1,60 +1,291 @@
-# Spec: Workflow Engine & Automation (module `workflow-automation`)
+# SPEC-007: Workflow Automation
 
-Descreve o motor de grafo de workflow (`shared/workflow-control-flow.mjs`,
-`shared/workflow-sequence.mjs`) e a automação de auto-claim
-(`shared/taskboard-automation*.mjs`). Parte do domínio `workflow_workspaces`
-(`SPEC-001`) e dos endpoints `/api/projects/:id/workflow-workspace`,
-`/api/workflow-capabilities`.
+## 0. SPEC Metadata
 
-## Workflow control-flow (grafo visual)
-- **Node types**: inclui `condition` (nós de decisão).
-- **Contrato de dados**:
-  - nodes: `{id, parentId?, position:{x,y}, data:{kind,...}}`
-  - edges: `{id, source, target, sourceHandle?, data?:{conditionId, conditionOutcome}}`
-- **Funções principais**:
-  - `orderedWorkflowStepIds(nodes,edges)` — ordenação topológica (Kahn por
-    in-degree; desempate por position y/x/id).
-  - `insertWorkflowStep`, `reorderWorkflowStep(stepIds,stepId,targetIndex,pinnedStepId)`
-  - `workflowSequenceEdges(stepIds)` — arestas em cadeia linear.
-  - `workflowConditionEdges(trunkStepIds,conditionId,branches{true,false})`
-    — arestas de branch com `conditionOutcome`.
-  - `normalizeWorkflowConditionBranches(nodes,edges)` — migra linear legado →
-    `{trunkStepIds, conditionId, branches, migrated}`.
-  - `layoutWorkflowSteps(nodes,stepIds,heights,{top,gap})` — layout vertical
-    com agrupamento de parent.
-- `workflow-sequence.mjs` re-exporta/duplica a mesma lógica de sequenciamento.
-- Persistido em `workflow_workspaces.workspace` (JSON) com `version` próprio
-  (conflito 409 igual a tasks).
+| Field | Value |
+|---|---|
+| Feature name | Workflow Automation |
+| Product / System | taskboard-ai |
+| Module / Bounded Context | Workflow |
+| Change type | Migration |
+| Repository | afonsoft/taskboard-ai |
+| Suggested branch | `devin/spec-workflow-net10` |
+| Technical owner | afonsoft |
+| Status | Draft |
+| Date | 2026-08-24 |
+| Target agent | Devin |
 
-## Automação de auto-claim (`taskboard-automation*.mjs`)
-- `AUTOMATION_MODELS` (em `options.mjs`): gpt-5.6-sol/terra/luna, gpt-5.5,
-  gpt-5.4, gpt-5.4-mini — cada um com `label, slug, defaultEffort, efforts[]`.
-  Helpers: `getAutomationModel`, `isAutomationModel`, `isAutomationReasoningEffort`,
-  `isSupportedModelEffort`, `withAutomationModel`.
-- `parseTaskboardAutomationHostRequest(value)` — valida strict request RPC do host:
-  `id, requestId, operation(ensure-active|pause|list|apply-policy),
-  taskboardProjectId, codexProject(Id/Kind/HostId), workspacePath, skillPath,
-  automationId, enabledByUser, quotaAware, intervalMinutes(∈{5,10,15,30,60}),
-  model, reasoningEffort, remoteProjects[]`.
-- `buildTaskboardAutomationName` / `buildTaskboardAutomationPrompt` (instrução
-  em chinês p/ claim/dispatch de `todo` para sessões Codex SSH remotas com
-  handoff de `threadBinding`) / `buildTaskboardAutomationSpec`
-  (`{kind:'cron', name, prompt, projectId, executionEnvironment:'local', model,
-  reasoningEffort, rrule:'RRULE:FREQ=MINUTELY;INTERVAL=N'}`).
-- `taskboardAutomationPolicyOperation` (pause/list/ensure-active com quota).
-- `reconcileTaskboardAutomation(request,rpc)` → via `list-automations`,
-  `automation-create`, `automation-update` RPCs; `sanitizeAutomation`.
+---
 
-## Endpoints (ver `SPEC-002`)
-- `GET/PUT /api/projects/:id/workflow-workspace` (PUT `{version,workspace}`)
-- `GET /api/workflow-capabilities?workspacePath=<abs>`
+## 1. Executive Summary
 
-## .NET mapping (`Taskboard.Workflow`)
-- `WorkflowGraph` (C#): mesmas structs `Node`/`Edge`; implementar
-  `OrderedStepIds` (Kahn), `InsertStep`, `ReorderStep`, `SequenceEdges`,
-  `ConditionEdges`, `NormalizeBranches`, `LayoutSteps`. Paridade de ordenação/
-  desempate é crítica p/ render idêntico.
-- `WorkflowWorkspaceService`: CRUD do JSON `workspace` + `version` lock 409.
-- `Automation` (C#): modelos/validação de `AUTOMATION_MODELS`; builder de prompt
-  e spec cron; reconciliação via RPC de automação Codex (manter contrato).
-- Persistir em `workflow_workspaces` (EF Core) ou JSON raw.
+### Problem
+
+O Taskboard possui workflow workspaces (JSON de board visual), engine de grafo de workflow e auto-claim de tarefas `todo` por agentes Codex.
+
+### Objective
+
+Especificar módulo de workflow e automação em .NET 10.
+
+### Expected outcome
+
+- `WorkflowWorkspace` persistido por projeto.
+- Control-flow engine para automação.
+- Auto-claim de `todo` → `in_progress` com handoff de `threadBinding`.
+
+### Out of scope
+
+- UI visual do workflow (ver `SPEC-008`).
+
+---
+
+## 2. Agent Role
+
+> Senior backend engineer com experiência em grafos, automação e agendamento.
+
+---
+
+## 3. Agent Autonomy Level
+
+3
+
+### Restrictions
+
+- Não executar ações destrutivas sem confirmação.
+- Não logar credenciais de Codex.
+
+---
+
+## 4. Product Context
+
+### Functional context
+
+Workflow permite customizar colunas, estados e automações por projeto. Auto-claim permite que agentes assumam tarefas `todo` automaticamente.
+
+### Technical context
+
+- Tabelas `workflow_workspaces`.
+- `workflow-control-flow.mjs` / `workflow-sequence.mjs`.
+- `taskboard-automation*.mjs`.
+
+### Relevant stack
+
+- .NET 10
+- JSON schema validation
+- Cron/scheduler (Hangfire ou HostedService)
+
+---
+
+## 5. Task Definition
+
+### Main task
+
+Mapear workflow workspaces e automação.
+
+### Subtasks
+
+- GET/PUT `/api/workflow-capabilities`.
+- GET/PUT `/api/device-workspaces`.
+- Control-flow engine.
+- Auto-claim policy.
+
+### Do not do
+
+- Não implementar UI nesta spec.
+
+---
+
+## 6. Functional Requirements
+
+### FR-001: Workflow Workspace
+
+**Description:**  
+GET/PUT JSON de configuração de board visual por projeto.
+
+### FR-002: Workflow Capabilities
+
+**Description:**  
+GET/PUT capabilities de workflow por device/projeto.
+
+### FR-003: Control-flow Engine
+
+**Description:**  
+Interpretar nós de workflow e executar ações condicionais.
+
+### FR-004: Auto-claim
+
+**Description:**  
+Cron que claim `todo` para sessões Codex remotas via SSH, com handoff de `threadBinding`.
+
+---
+
+## 7. Business Rules
+
+- Apenas tarefas `todo` podem ser auto-claimed.
+- `threadBinding` deve ser respeitado.
+- Conflito de versão → retry uma vez.
+
+---
+
+## 8. Domain Modeling
+
+### Aggregates
+
+| Aggregate | Responsibility | Invariants |
+|---|---|---|
+| WorkflowWorkspace | Config JSON por projeto | JSON válido |
+
+### Entities
+
+| Entity | Identity | Responsibility |
+|---|---|---|
+| WorkflowNode | NodeId | Nó do grafo |
+| WorkflowSequence | SequenceId | Sequência de execução |
+
+---
+
+## 9. Expected Architecture
+
+```text
+src/Taskboard.Workflow/
+  Domain/
+    WorkflowWorkspace.cs
+  Application/
+    ControlFlowEngine.cs
+  Infrastructure/
+    WorkflowScheduler.cs
+```
+
+---
+
+## 10. API Contracts
+
+```http
+GET/PUT /api/workflow-capabilities
+GET/PUT /api/device-workspaces
+```
+
+---
+
+## 11. Application Contracts
+
+```csharp
+public sealed record UpdateWorkflowWorkspaceCommand(ProjectId ProjectId, JsonElement Workspace) : IRequest;
+public sealed record UpdateWorkflowCapabilitiesCommand(string DeviceId, JsonElement Capabilities) : IRequest;
+```
+
+---
+
+## 12. Persistence and Data
+
+Ver `SPEC-011-persistence.md`.
+
+---
+
+## 13. Integrations
+
+| Service | Data sent | Data received | Security |
+|---|---|---|---|
+| Codex app-server | spawn requests | status | local socket |
+
+---
+
+## 14. Edge Cases and Error Scenarios
+
+| Scenario | Input | Expected behavior |
+|---|---|---|
+| Workspace JSON inválido | syntax error | 400 |
+| Auto-claim sem tarefas | nenhum todo | idle |
+| Conflito de versão | retry uma vez | 409 se persistir |
+
+---
+
+## 15. Few-Shot Examples
+
+```http
+PUT /api/workflow-capabilities
+{
+  "deviceId": "dev-1",
+  "capabilities": { "nodes": ["start", "claim", "review"] }
+}
+```
+
+---
+
+## 16. Non-Functional Requirements
+
+- Scheduler precisão de 1 minuto.
+- JSON schema validado previamente.
+
+---
+
+## 17. Mandatory Guardrails
+
+- Não executar ações fora do escopo definido.
+- Não expor `threadBinding` em logs.
+
+---
+
+## 18. Expected Tests
+
+| Flow | Validation |
+|---|---|
+| PUT workspace | persistência |
+| Auto-claim | move todo → in_progress |
+| Capabilities | GET/PUT |
+
+---
+
+## 19. Acceptance Criteria
+
+- [ ] Workflow workspace mapeado.
+- [ ] Auto-claim especificado.
+- [ ] Capabilities endpoints.
+
+---
+
+## 20. Implementation Plan
+
+1. Criar `WorkflowWorkspace` aggregate.
+2. Implementar GET/PUT endpoints.
+3. Implementar control-flow engine.
+4. Implementar auto-claim scheduler.
+
+---
+
+## 21. Rollback Strategy
+
+- Desabilitar scheduler.
+- Restaurar workspace anterior.
+
+---
+
+## 22. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|---|---|---:|---|
+| Complexidade de grafos | Médio | Média | Iniciar com sequences simples |
+| Auto-claim incorreto | Alto | Média | Regras claras + logs |
+
+---
+
+## 23. Definition of Done
+
+- [ ] SPEC revisado.
+- [ ] Contratos claros.
+
+---
+
+## 24. Key Reminder
+
+> The SPEC is the contract.
+
+## Pending Questions
+
+1. Usar Hangfire ou `IHostedService` para cron?
+2. Auto-claim requer SSH ou spawn local?
+
+## Human Approval Checklist
+
+- [ ] Workflow workspace claro.
+- [ ] Auto-claim com regras.

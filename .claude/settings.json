@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "ask": [
+      "Edit",
+      "Write",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git checkout:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/secrets.*)",
+      "Read(./secrets/**)",
+      "Read(./.github/workflows/**)",
+      "Edit(./.github/workflows/**)",
+      "Bash(git push:origin main)",
+      "Bash(git push:origin master)",
+      "Bash(git push:origin develop)"
+    ]
+  }
+}

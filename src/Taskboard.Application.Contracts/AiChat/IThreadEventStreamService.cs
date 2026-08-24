@@ -1,4 +1,4 @@
-namespace Taskboard.Server.Services;
+namespace Taskboard.Application.Contracts.AiChat;
 
 public interface IThreadEventStreamService
 {
@@ -6,3 +6,5 @@ public interface IThreadEventStreamService
 
     Task PublishAsync(string threadId, ServerSentEvent serverSentEvent, CancellationToken cancellationToken = default);
 }
+
+public sealed record ServerSentEvent(string Type, object Payload);

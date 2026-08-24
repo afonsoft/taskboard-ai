@@ -1,3 +1,5 @@
+using Taskboard.Application.Contracts.AiChat;
+
 namespace Taskboard.Server.Services;
 
 public interface IEventStreamService

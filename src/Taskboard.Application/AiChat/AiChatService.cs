@@ -1,10 +1,15 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Taskboard;
 using Taskboard.Application.Contracts.AiChat;
+using Taskboard.Application.Mapping;
 using Taskboard.Domain.Entities;
 using Taskboard.Domain.Events;
+using Taskboard.Dtos;
 using Taskboard.Repositories;
+using Taskboard.Requests;
 using Taskboard.ValueObjects;
+using Volo.Abp.Uow;
 
 namespace Taskboard.Application.AiChat;
 
@@ -47,7 +52,7 @@ public sealed class AiChatService
 
         if (request.OriginProjectId != null && project is null)
         {
-            throw new DomainException(TaskboardDomainErrorCodes.ProjectNotFound, $"Project '{request.OriginProjectId}' not found.");
+            throw new DomainException(TaskboardDomainErrorCodes.EmptyProjectName, $"Project '{request.OriginProjectId}' not found.");
         }
 
         var thread = AiChatThread.Create(
@@ -84,7 +89,7 @@ public sealed class AiChatService
         var thread = await _threadRepo.GetAsync(threadId, ct);
         if (thread is null)
         {
-            throw new DomainException(TaskboardDomainErrorCodes.TaskNotFound, $"Thread '{threadId.Value}' not found.");
+            throw new DomainException(TaskboardDomainErrorCodes.InvalidValue, $"Thread '{threadId.Value}' not found.");
         }
 
         var run = thread.StartRun();
@@ -92,16 +97,15 @@ public sealed class AiChatService
         await _unitOfWork.SaveChangesAsync(ct);
 
         // Start the AI run asynchronously
-        _ = Task.Run(() => ExecuteRunAsync(thread.Id, run.Id, ct));
+        _ = System.Threading.Tasks.Task.Run(() => ExecuteRunAsync(thread.Id, run.Id, ct));
 
         return run.ToDto();
     }
 
-    private async Task ExecuteRunAsync(AiChatThreadId threadId, AiChatRunId runId, CancellationToken ct)
+    private async System.Threading.Tasks.Task ExecuteRunAsync(AiChatThreadId threadId, AiChatRunId runId, CancellationToken ct)
     {
         try
         {
-            using var scope = _unitOfWork.BeginScope();
             var run = await _runRepo.GetAsync(runId, ct);
             var thread = await _threadRepo.GetAsync(threadId, ct);
             
@@ -166,7 +170,6 @@ public sealed class AiChatService
         }
         catch (Exception)
         {
-            using var scope = _unitOfWork.BeginScope();
             var run = await _runRepo.GetAsync(runId, ct);
             var thread = await _threadRepo.GetAsync(threadId, ct);
             
@@ -195,7 +198,7 @@ public sealed class AiChatService
         var thread = await _threadRepo.GetAsync(threadId, ct);
         if (thread is null)
         {
-            throw new DomainException(TaskboardDomainErrorCodes.TaskNotFound, $"Thread '{threadId.Value}' not found.");
+            throw new DomainException(TaskboardDomainErrorCodes.InvalidValue, $"Thread '{threadId.Value}' not found.");
         }
 
         var role = AiChatEventRole.From(request.Role);

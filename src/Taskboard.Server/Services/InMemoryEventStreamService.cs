@@ -1,4 +1,5 @@
 using System.Threading.Channels;
+using Taskboard.Application.Contracts.AiChat;
 
 namespace Taskboard.Server.Services;
 

@@ -42,6 +42,11 @@ ScaffoldingReadMe.txt
 # Local runtime data
 .data/
 
+# Local installer artifacts
+.tools/
+.agent/skills/
+.agents/skills/
+
 # Others
 ~$*
 *~

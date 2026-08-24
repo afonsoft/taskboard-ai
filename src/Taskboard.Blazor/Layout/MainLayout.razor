@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IHttpContextAccessor HttpContextAccessor
 
 <div class="page">
     <div class="sidebar">
@@ -8,6 +9,12 @@
     <main>
         <div class="top-row px-4">
             <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
+            @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
+            {
+                <form method="post" action="/api/logout" class="logout-form">
+                    <button type="submit">Log out</button>
+                </form>
+            }
         </div>
 
         <article class="content px-4">

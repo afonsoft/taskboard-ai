@@ -1,0 +1,17 @@
+@page "/login"
+
+<div class="login-container">
+    <h1>Taskboard</h1>
+    <form method="post" action="/api/login" class="login-form">
+        <label>
+            Username
+            <input type="text" name="Username" required autofocus />
+        </label>
+        <label>
+            Password
+            <input type="password" name="Password" required />
+        </label>
+        <input type="hidden" name="ReturnUrl" value="/" />
+        <button type="submit">Sign in</button>
+    </form>
+</div>

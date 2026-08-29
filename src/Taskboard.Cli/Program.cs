@@ -1,7 +1,6 @@
-using System.CommandLine;
-using System.CommandLine.Invocation;
 using System.Net.Http.Headers;
 using System.Text.Json.Nodes;
+using Spectre.Console.Cli;
 using Taskboard.Cli.Services;
 using Taskboard.Requests;
 using Taskboard.ValueObjects;
@@ -10,25 +9,75 @@ namespace Taskboard.Cli;
 
 internal static class Program
 {
-    private static readonly Option<string> UrlOption = new("--url", "URL base da API (default: config ou 127.0.0.1:47823)");
-    private static readonly Option<bool> JsonOption = new("--json", "Saída em JSON");
-
     static async Task<int> Main(string[] args)
     {
-        var root = new RootCommand("taskctl - Taskboard CLI");
-        root.AddGlobalOption(UrlOption);
-        root.AddGlobalOption(JsonOption);
+        var app = new CommandApp<AppRootCommand>();
+        app.Configure(config =>
+        {
+            config.AddCommand<ContextCurrentCommand>("context:current");
+            config.AddCommand<ProjectListCommand>("project:list");
+            config.AddCommand<ProjectCreateCommand>("project:create");
+            config.AddCommand<ProjectMapCommand>("project:map");
 
-        root.AddCommand(CreateProjectCommand());
-        root.AddCommand(CreateIssueCommand());
-        root.AddCommand(CreateCommentCommand());
-        root.AddCommand(CreateAttachmentCommand());
-        root.AddCommand(CreateCloudCommand());
-        root.AddCommand(CreateContextCommand());
+            config.AddCommand<IssueListCommand>("issue:list");
+            config.AddCommand<IssueGetCommand>("issue:get");
+            config.AddCommand<IssueCreateCommand>("issue:create");
+            config.AddCommand<IssueUpdateCommand>("issue:update");
+            config.AddCommand<IssueMoveCommand>("issue:move");
+            config.AddCommand<IssueArchiveCommand>("issue:archive");
+            config.AddCommand<IssueRestoreCommand>("issue:restore");
+            config.AddCommand<IssueRelationCommand>("issue:relation");
+
+            config.AddCommand<CommentListCommand>("comment:list");
+            config.AddCommand<CommentAddCommand>("comment:add");
+            config.AddCommand<CommentUpdateCommand>("comment:update");
+            config.AddCommand<CommentDeleteCommand>("comment:delete");
+
+            config.AddCommand<AttachmentUploadCommand>("attachment:upload");
+            config.AddCommand<AttachmentDownloadCommand>("attachment:download");
+
+            config.AddCommand<CloudLoginCommand>("cloud:login");
+            config.AddCommand<CloudStatusCommand>("cloud:status");
+            config.AddCommand<CloudLogoutCommand>("cloud:logout");
+
+            config.AddCommand<ContextCurrentCommand>("context:current");
+            config.AddCommand<ProjectListCommand>("project:list");
+            config.AddCommand<ProjectCreateCommand>("project:create");
+        });
 
         try
         {
-            return await root.InvokeAsync(args);
+            return await app.RunAsync(args);
+        }
+        catch (Exception ex)
+        {
+            await Console.Error.WriteLineAsync(ex.ToString());
+            return 1;
+        }
+    }
+
+    internal static string ResolveBaseUrl(string? urlArg)
+    {
+        var env = Environment.GetEnvironmentVariable("TASKBOARD_URL");
+        if (!string.IsNullOrWhiteSpace(env))
+        {
+            return env;
+        }
+
+        if (!string.IsNullOrWhiteSpace(urlArg))
+        {
+            return urlArg;
+        }
+
+        return CliConfigService.Load().BaseUrl;
+    }
+
+    internal static async Task<int> RunAsync(GlobalSettings settings, Func<TaskboardApiClient, CancellationToken, Task<int>> action)
+    {
+        var client = new TaskboardApiClient(ResolveBaseUrl(settings.Url));
+        try
+        {
+            return await action(client, CancellationToken.None);
         }
         catch (CliException ex)
         {
@@ -46,37 +95,14 @@ internal static class Program
         }
     }
 
-    private static string GetBaseUrl(InvocationContext ctx)
-    {
-        var env = Environment.GetEnvironmentVariable("TASKBOARD_URL");
-        if (!string.IsNullOrWhiteSpace(env))
-        {
-            return env;
-        }
-
-        var arg = ctx.ParseResult.GetValueForOption(UrlOption);
-        if (!string.IsNullOrWhiteSpace(arg))
-        {
-            return arg;
-        }
-
-        return CliConfigService.Load().BaseUrl;
-    }
-
-    private static TaskboardApiClient CreateClient(InvocationContext ctx)
-        => new(GetBaseUrl(ctx));
-
-    private static bool IsJson(InvocationContext ctx)
-        => ctx.ParseResult.GetValueForOption(JsonOption);
-
-    private static async Task<int> WriteOutputAsync(InvocationContext ctx, JsonNode? node, string? extractPath = null)
+    internal static async Task<int> WriteOutputAsync(bool json, JsonNode? node, string? extractPath = null)
     {
         if (extractPath is not null && node is not null)
         {
             node = node[extractPath];
         }
 
-        if (IsJson(ctx))
+        if (json)
         {
             Console.WriteLine(node?.ToJsonString() ?? "{}");
             return 0;
@@ -114,7 +140,7 @@ internal static class Program
         return 0;
     }
 
-    private static async Task<string?> ResolveTaskIdAsync(TaskboardApiClient client, string identifier, CancellationToken ct)
+    internal static async Task<string?> ResolveTaskIdAsync(TaskboardApiClient client, string identifier, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(identifier))
         {
@@ -139,7 +165,7 @@ internal static class Program
         return null;
     }
 
-    private static async Task<(string? TaskId, string? CommentId)> ResolveCommentAsync(TaskboardApiClient client, string commentId, CancellationToken ct)
+    internal static async Task<(string? TaskId, string? CommentId)> ResolveCommentAsync(TaskboardApiClient client, string commentId, CancellationToken ct)
     {
         var all = await client.GetAsync("/api/tasks", ct);
         var tasks = all?["tasks"] as JsonArray;
@@ -175,456 +201,580 @@ internal static class Program
         return (null, null);
     }
 
-    private static Command CreateProjectCommand()
+    internal static void AddIfSet(List<string> query, string name, string? value)
     {
-        var project = new Command("project", "Gerenciar projetos");
-
-        var list = new Command("list", "Listar projetos");
-        list.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var result = await client.GetAsync("/api/projects", ct);
-            return await WriteOutputAsync(ctx, result, "projects");
-        });
-
-        var idOpt = new Option<string?>("--id", () => null, "ID do projeto");
-        var nameOpt = new Option<string>("--name", "Nome do projeto") { IsRequired = true };
-        var workspaceOpt = new Option<string?>("--workspace-path", () => null, "Caminho do workspace");
-
-        var create = new Command("create", "Criar projeto")
-        {
-            idOpt,
-            nameOpt,
-            workspaceOpt,
-        };
-        create.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var id = ctx.ParseResult.GetValueForOption(idOpt);
-            var name = ctx.ParseResult.GetValueForOption(nameOpt)!;
-            var workspace = ctx.ParseResult.GetValueForOption(workspaceOpt);
-            var payload = new CreateProjectRequest(id, name, workspace);
-            var result = await client.PostAsync("/api/projects", payload, ct);
-            return await WriteOutputAsync(ctx, result, "project");
-        });
-
-        var mapProjectArg = new Argument<string>("project", "ID do projeto");
-        var mapWorkspaceOpt = new Option<string?>("--workspace-path", () => null, "Caminho do workspace");
-        var map = new Command("map", "Definir projeto/workspace atual")
-        {
-            mapProjectArg,
-            mapWorkspaceOpt,
-        };
-        map.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var config = CliConfigService.Load();
-            var projectId = ctx.ParseResult.GetValueForArgument(mapProjectArg);
-            var workspace = ctx.ParseResult.GetValueForOption(mapWorkspaceOpt);
-            config.CurrentProject = projectId;
-            config.CurrentWorkspace = workspace ?? config.CurrentWorkspace;
-            CliConfigService.Save(config);
-
-            var node = new JsonObject
-            {
-                ["projectId"] = projectId,
-                ["workspacePath"] = workspace,
-            };
-            return await WriteOutputAsync(ctx, node);
-        });
-
-        project.AddCommand(list);
-        project.AddCommand(create);
-        project.AddCommand(map);
-        return project;
-    }
-
-    private static Command CreateIssueCommand()
-    {
-        var issue = new Command("issue", "Gerenciar issues/tarefas");
-
-        var projectOpt = new Option<string?>("--project", () => null, "ID do projeto");
-        var statusOpt = new Option<string?>("--status", () => null, "Status");
-        var archivedOpt = new Option<bool?>("--archived", () => null, "Incluir arquivadas");
-        var assigneeOpt = new Option<string?>("--assignee", () => null, "Assignee");
-        var labelOpt = new Option<string?>("--label", () => null, "Label");
-        var titleOpt = new Option<string?>("--title", () => null, "Título");
-        var descriptionOpt = new Option<string?>("--description", () => null, "Descrição");
-        var priorityOpt = new Option<string?>("--priority", () => null, "Prioridade");
-        var sortOpt = new Option<double?>("--sort-order", () => null, "Ordem");
-        var dueOpt = new Option<DateTime?>("--due-date", () => null, "Data de vencimento");
-        var startOpt = new Option<DateTime?>("--start-date", () => null, "Data de início");
-        var versionOpt = new Option<long?>("--version", () => null, "Versão para otimista");
-
-        var list = new Command("list", "Listar issues")
-        {
-            projectOpt, statusOpt, archivedOpt, assigneeOpt, labelOpt,
-        };
-        list.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var query = new List<string>();
-            AddIfSet(query, ctx, "projectId", projectOpt);
-            AddIfSet(query, ctx, "status", statusOpt);
-            if (ctx.ParseResult.GetValueForOption(archivedOpt) is { } a)
-            {
-                query.Add($"archived={a.ToString().ToLowerInvariant()}");
-            }
-            AddIfSet(query, ctx, "assigneeId", assigneeOpt);
-            AddIfSet(query, ctx, "label", labelOpt);
-
-            var path = "/api/tasks" + (query.Count > 0 ? "?" + string.Join("&", query) : string.Empty);
-            var result = await client.GetAsync(path, ct);
-            return await WriteOutputAsync(ctx, result, "tasks");
-        });
-
-        var getArg = new Argument<string>("identifier", "Identificador da issue");
-        var get = new Command("get", "Obter issue") { getArg };
-        get.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(getArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
-            if (id is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var result = await client.GetAsync($"/api/tasks/{id}", ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var create = new Command("create", "Criar issue")
-        {
-            projectOpt, titleOpt, descriptionOpt, statusOpt, priorityOpt, sortOpt, dueOpt, startOpt,
-        };
-        create.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var config = CliConfigService.Load();
-            var projectId = ctx.ParseResult.GetValueForOption(projectOpt) ?? config.CurrentProject;
-            if (string.IsNullOrWhiteSpace(projectId))
-            {
-                throw new CliException(2, "Informe --project ou use 'taskctl project map'.");
-            }
-
-            var title = ctx.ParseResult.GetValueForOption(titleOpt);
-            if (string.IsNullOrWhiteSpace(title))
-            {
-                throw new CliException(2, "Informe --title.");
-            }
-
-            var payload = new CreateTaskRequest(
-                projectId,
-                title,
-                ctx.ParseResult.GetValueForOption(descriptionOpt),
-                ctx.ParseResult.GetValueForOption(statusOpt),
-                ctx.ParseResult.GetValueForOption(priorityOpt),
-                null,
-                null,
-                ctx.ParseResult.GetValueForOption(sortOpt),
-                ctx.ParseResult.GetValueForOption(startOpt),
-                ctx.ParseResult.GetValueForOption(dueOpt));
-
-            var result = await client.PostAsync("/api/tasks", payload, ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var updateArg = new Argument<string>("identifier", "Identificador da issue");
-        var update = new Command("update", "Atualizar issue")
-        {
-            updateArg, titleOpt, descriptionOpt, statusOpt, priorityOpt, versionOpt,
-        };
-        update.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(updateArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
-            if (id is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var current = await client.GetAsync($"/api/tasks/{id}", ct);
-            var version = ctx.ParseResult.GetValueForOption(versionOpt) ?? current?["task"]?["version"]?.GetValue<long>() ?? 0L;
-
-            var patch = new TaskPatch(
-                Title: ctx.ParseResult.GetValueForOption(titleOpt),
-                Description: ctx.ParseResult.GetValueForOption(descriptionOpt),
-                Status: ctx.ParseResult.GetValueForOption(statusOpt),
-                Priority: ctx.ParseResult.GetValueForOption(priorityOpt));
-
-            var payload = new UpdateTaskRequest(version, patch);
-            var result = await client.PatchAsync($"/api/tasks/{id}", payload, ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var moveArg = new Argument<string>("identifier", "Identificador da issue");
-        var moveStatusOpt = new Option<string>("--status", "Status de destino") { IsRequired = true };
-        var moveSortOpt = new Option<double?>("--sort-order", () => null, "Ordem");
-        var move = new Command("move", "Mover issue")
-        {
-            moveArg, moveStatusOpt, moveSortOpt,
-        };
-        move.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(moveArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
-            if (id is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var status = ctx.ParseResult.GetValueForOption(moveStatusOpt)!;
-            var payload = new MoveTaskRequest(status, ctx.ParseResult.GetValueForOption(moveSortOpt));
-            var result = await client.PostAsync($"/api/tasks/{id}/move", payload, ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var archiveArg = new Argument<string>("identifier", "Identificador da issue");
-        var archive = new Command("archive", "Arquivar issue") { archiveArg };
-        archive.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(archiveArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
-            if (id is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var result = await client.PostAsync($"/api/tasks/{id}/archive", null, ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var restoreArg = new Argument<string>("identifier", "Identificador da issue");
-        var restore = new Command("restore", "Restaurar issue") { restoreArg };
-        restore.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(restoreArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
-            if (id is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var result = await client.PostAsync($"/api/tasks/{id}/restore", null, ct);
-            return await WriteOutputAsync(ctx, result, "task");
-        });
-
-        var relSourceArg = new Argument<string>("identifier", "Identificador da issue de origem");
-        var relActionArg = new Argument<string>("action", "add ou remove");
-        var relTypeArg = new Argument<string>("type", "Tipo da relação");
-        var relTargetArg = new Argument<string>("target", "Identificador da issue de destino");
-        var relation = new Command("relation", "Gerenciar relações")
-        {
-            relSourceArg, relActionArg, relTypeArg, relTargetArg,
-        };
-        relation.Handler = new AsyncHandler(async (ctx, ct) =>
-        {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(relSourceArg);
-            var action = ctx.ParseResult.GetValueForArgument(relActionArg);
-            var type = ctx.ParseResult.GetValueForArgument(relTypeArg);
-            var target = ctx.ParseResult.GetValueForArgument(relTargetArg);
-            var sourceId = await ResolveTaskIdAsync(client, identifier, ct);
-            if (sourceId is null)
-            {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
-            }
-
-            var targetId = await ResolveTaskIdAsync(client, target, ct);
-            if (targetId is null)
-            {
-                throw new CliException(2, $"Issue '{target}' não encontrada.");
-            }
-
-            if (action.Equals("add", StringComparison.OrdinalIgnoreCase))
-            {
-                var payload = new CreateRelationRequest(targetId, type);
-                var result = await client.PostAsync($"/api/tasks/{sourceId}/relations", payload, ct);
-                return await WriteOutputAsync(ctx, result, "relation");
-            }
-
-            if (action.Equals("remove", StringComparison.OrdinalIgnoreCase))
-            {
-                await client.DeleteAsync($"/api/tasks/{sourceId}/relations/{type}/{targetId}", ct);
-                return await WriteOutputAsync(ctx, null);
-            }
-
-            throw new CliException(2, "Ação deve ser 'add' ou 'remove'.");
-        });
-
-        issue.AddCommand(list);
-        issue.AddCommand(get);
-        issue.AddCommand(create);
-        issue.AddCommand(update);
-        issue.AddCommand(move);
-        issue.AddCommand(archive);
-        issue.AddCommand(restore);
-        issue.AddCommand(relation);
-        return issue;
-    }
-
-    private static void AddIfSet(List<string> query, InvocationContext ctx, string name, Option<string?> option)
-    {
-        var value = ctx.ParseResult.GetValueForOption(option);
         if (!string.IsNullOrWhiteSpace(value))
         {
             query.Add($"{name}={Uri.EscapeDataString(value)}");
         }
     }
+}
 
-    private static Command CreateCommentCommand()
+public class EmptySettings : CommandSettings
+{
+}
+
+public class GlobalSettings : CommandSettings
+{
+    [CommandOption("--url")]
+    public string? Url { get; set; }
+
+    [CommandOption("--json")]
+    public bool Json { get; set; }
+}
+
+public class AppRootCommand : AsyncCommand<EmptySettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, EmptySettings settings)
     {
-        var comment = new Command("comment", "Gerenciar comentários");
+        Console.WriteLine("taskctl - [green]Taskboard CLI[/]");
+        Console.WriteLine("Use [blue]taskctl --help[/] para listar comandos.");
+        return 0;
+    }
+}
 
-        var taskArg = new Argument<string>("identifier", "Identificador da issue");
-        var list = new Command("list", "Listar comentários") { taskArg };
-        list.Handler = new AsyncHandler(async (ctx, ct) =>
+public class ProjectListSettings : GlobalSettings
+{
+}
+
+public class ProjectListCommand : AsyncCommand<ProjectListSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, ProjectListSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(taskArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
+            var result = await client.GetAsync("/api/projects", ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "projects");
+        });
+}
+
+public class ProjectCreateSettings : GlobalSettings
+{
+    [CommandOption("--id")]
+    public string? Id { get; set; }
+
+    [CommandOption("--name")]
+    public string? Name { get; set; }
+
+    [CommandOption("--workspace-path")]
+    public string? WorkspacePath { get; set; }
+}
+
+public class ProjectCreateCommand : AsyncCommand<ProjectCreateSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, ProjectCreateSettings settings)
+    {
+        if (string.IsNullOrWhiteSpace(settings.Name))
+        {
+            throw new CliException(2, "Informe --name.");
+        }
+
+        return await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var payload = new CreateProjectRequest(settings.Id, settings.Name!, settings.WorkspacePath);
+            var result = await client.PostAsync("/api/projects", payload, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "project");
+        });
+    }
+}
+
+public class ProjectMapSettings : GlobalSettings
+{
+    [CommandArgument(0, "<project>")]
+    public string Project { get; set; } = default!;
+
+    [CommandOption("--workspace-path")]
+    public string? WorkspacePath { get; set; }
+}
+
+public class ProjectMapCommand : AsyncCommand<ProjectMapSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, ProjectMapSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var config = CliConfigService.Load();
+            config.CurrentProject = settings.Project;
+            config.CurrentWorkspace = settings.WorkspacePath ?? config.CurrentWorkspace;
+            CliConfigService.Save(config);
+
+            var node = new JsonObject
+            {
+                ["projectId"] = settings.Project,
+                ["workspacePath"] = settings.WorkspacePath,
+            };
+            return await Program.WriteOutputAsync(settings.Json, node);
+        });
+}
+
+public class IssueListSettings : GlobalSettings
+{
+    [CommandOption("--project")]
+    public string? Project { get; set; }
+
+    [CommandOption("--status")]
+    public string? Status { get; set; }
+
+    [CommandOption("--archived")]
+    public bool? Archived { get; set; }
+
+    [CommandOption("--assignee")]
+    public string? Assignee { get; set; }
+
+    [CommandOption("--label")]
+    public string? Label { get; set; }
+}
+
+public class IssueListCommand : AsyncCommand<IssueListSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueListSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var query = new List<string>();
+            Program.AddIfSet(query, "projectId", settings.Project);
+            Program.AddIfSet(query, "status", settings.Status);
+            if (settings.Archived is { } a)
+            {
+                query.Add($"archived={a.ToString().ToLowerInvariant()}");
+            }
+
+            Program.AddIfSet(query, "assigneeId", settings.Assignee);
+            Program.AddIfSet(query, "label", settings.Label);
+
+            var path = "/api/tasks" + (query.Count > 0 ? "?" + string.Join("&", query) : string.Empty);
+            var result = await client.GetAsync(path, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "tasks");
+        });
+}
+
+public class IssueGetSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+}
+
+public class IssueGetCommand : AsyncCommand<IssueGetSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueGetSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
             if (id is null)
             {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var result = await client.GetAsync($"/api/tasks/{id}", ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueCreateSettings : GlobalSettings
+{
+    [CommandOption("--project")]
+    public string? Project { get; set; }
+
+    [CommandOption("--title")]
+    public string? Title { get; set; }
+
+    [CommandOption("--description")]
+    public string? Description { get; set; }
+
+    [CommandOption("--status")]
+    public string? Status { get; set; }
+
+    [CommandOption("--priority")]
+    public string? Priority { get; set; }
+
+    [CommandOption("--sort-order")]
+    public double? SortOrder { get; set; }
+
+    [CommandOption("--start-date")]
+    public DateTime? StartDate { get; set; }
+
+    [CommandOption("--due-date")]
+    public DateTime? DueDate { get; set; }
+}
+
+public class IssueCreateCommand : AsyncCommand<IssueCreateSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueCreateSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var config = CliConfigService.Load();
+            var projectId = settings.Project ?? config.CurrentProject;
+            if (string.IsNullOrWhiteSpace(projectId))
+            {
+                throw new CliException(2, "Informe --project ou use 'taskctl project map'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.Title))
+            {
+                throw new CliException(2, "Informe --title.");
+            }
+
+            var payload = new CreateTaskRequest(
+                projectId!,
+                settings.Title!,
+                settings.Description,
+                settings.Status,
+                settings.Priority,
+                null,
+                null,
+                settings.SortOrder,
+                settings.StartDate,
+                settings.DueDate);
+
+            var result = await client.PostAsync("/api/tasks", payload, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueUpdateSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+
+    [CommandOption("--title")]
+    public string? Title { get; set; }
+
+    [CommandOption("--description")]
+    public string? Description { get; set; }
+
+    [CommandOption("--status")]
+    public string? Status { get; set; }
+
+    [CommandOption("--priority")]
+    public string? Priority { get; set; }
+
+    [CommandOption("--version")]
+    public long? Version { get; set; }
+}
+
+public class IssueUpdateCommand : AsyncCommand<IssueUpdateSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueUpdateSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (id is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var current = await client.GetAsync($"/api/tasks/{id}", ct);
+            var version = settings.Version ?? current?["task"]?["version"]?.GetValue<long>() ?? 0L;
+
+            var patch = new TaskPatch(
+                Title: settings.Title,
+                Description: settings.Description,
+                Status: settings.Status,
+                Priority: settings.Priority);
+
+            var payload = new UpdateTaskRequest(version, patch);
+            var result = await client.PatchAsync($"/api/tasks/{id}", payload, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueMoveSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+
+    [CommandOption("--status")]
+    public string? Status { get; set; }
+
+    [CommandOption("--sort-order")]
+    public double? SortOrder { get; set; }
+}
+
+public class IssueMoveCommand : AsyncCommand<IssueMoveSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueMoveSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(settings.Status))
+            {
+                throw new CliException(2, "Informe --status.");
+            }
+
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (id is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var payload = new MoveTaskRequest(settings.Status!, settings.SortOrder);
+            var result = await client.PostAsync($"/api/tasks/{id}/move", payload, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueArchiveSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+}
+
+public class IssueArchiveCommand : AsyncCommand<IssueArchiveSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueArchiveSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (id is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var result = await client.PostAsync($"/api/tasks/{id}/archive", null, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueRestoreSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+}
+
+public class IssueRestoreCommand : AsyncCommand<IssueRestoreSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueRestoreSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (id is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var result = await client.PostAsync($"/api/tasks/{id}/restore", null, ct);
+            return await Program.WriteOutputAsync(settings.Json, result, "task");
+        });
+}
+
+public class IssueRelationSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+
+    [CommandArgument(1, "<action>")]
+    public string Action { get; set; } = default!;
+
+    [CommandArgument(2, "<type>")]
+    public string Type { get; set; } = default!;
+
+    [CommandArgument(3, "<target>")]
+    public string Target { get; set; } = default!;
+}
+
+public class IssueRelationCommand : AsyncCommand<IssueRelationSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, IssueRelationSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var sourceId = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (sourceId is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
+            }
+
+            var targetId = await Program.ResolveTaskIdAsync(client, settings.Target, ct);
+            if (targetId is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Target}' não encontrada.");
+            }
+
+            if (settings.Action.Equals("add", StringComparison.OrdinalIgnoreCase))
+            {
+                var payload = new CreateRelationRequest(targetId, settings.Type);
+                var result = await client.PostAsync($"/api/tasks/{sourceId}/relations", payload, ct);
+                return await Program.WriteOutputAsync(settings.Json, result, "relation");
+            }
+
+            if (settings.Action.Equals("remove", StringComparison.OrdinalIgnoreCase))
+            {
+                await client.DeleteAsync($"/api/tasks/{sourceId}/relations/{settings.Type}/{targetId}", ct);
+                return await Program.WriteOutputAsync(settings.Json, null);
+            }
+
+            throw new CliException(2, "Ação deve ser 'add' ou 'remove'.");
+        });
+}
+
+public class CommentListSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+}
+
+public class CommentListCommand : AsyncCommand<CommentListSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CommentListSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
+        {
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
+            if (id is null)
+            {
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
             }
 
             var result = await client.GetAsync($"/api/tasks/{id}/comments", ct);
-            return await WriteOutputAsync(ctx, result, "comments");
+            return await Program.WriteOutputAsync(settings.Json, result, "comments");
         });
+}
 
-        var addBodyArg = new Argument<string>("body", "Texto do comentário");
-        var add = new Command("add", "Adicionar comentário") { taskArg, addBodyArg };
-        add.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CommentAddSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
+
+    [CommandArgument(1, "<body>")]
+    public string Body { get; set; } = default!;
+}
+
+public class CommentAddCommand : AsyncCommand<CommentAddSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CommentAddSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(taskArg);
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
             if (id is null)
             {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
             }
 
-            var body = ctx.ParseResult.GetValueForArgument(addBodyArg);
-            var payload = new CreateCommentRequest(body);
+            var payload = new CreateCommentRequest(settings.Body);
             var result = await client.PostAsync($"/api/tasks/{id}/comments", payload, ct);
-            return await WriteOutputAsync(ctx, result, "comment");
+            return await Program.WriteOutputAsync(settings.Json, result, "comment");
         });
+}
 
-        var commentIdArg = new Argument<string>("commentId", "ID do comentário");
-        var updateBodyArg = new Argument<string>("body", "Novo texto");
-        var update = new Command("update", "Atualizar comentário") { commentIdArg, updateBodyArg };
-        update.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CommentUpdateSettings : GlobalSettings
+{
+    [CommandArgument(0, "<commentId>")]
+    public string CommentId { get; set; } = default!;
+
+    [CommandArgument(1, "<body>")]
+    public string Body { get; set; } = default!;
+}
+
+public class CommentUpdateCommand : AsyncCommand<CommentUpdateSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CommentUpdateSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var commentId = ctx.ParseResult.GetValueForArgument(commentIdArg);
-            var (taskId, resolvedCommentId) = await ResolveCommentAsync(client, commentId, ct);
+            var (taskId, resolvedCommentId) = await Program.ResolveCommentAsync(client, settings.CommentId, ct);
             if (taskId is null || resolvedCommentId is null)
             {
-                throw new CliException(2, $"Comentário '{commentId}' não encontrado.");
+                throw new CliException(2, $"Comentário '{settings.CommentId}' não encontrado.");
             }
 
-            var body = ctx.ParseResult.GetValueForArgument(updateBodyArg);
-            var payload = new UpdateCommentRequest(body);
+            var payload = new UpdateCommentRequest(settings.Body);
             var result = await client.PatchAsync($"/api/tasks/{taskId}/comments/{resolvedCommentId}", payload, ct);
-            return await WriteOutputAsync(ctx, result, "comment");
+            return await Program.WriteOutputAsync(settings.Json, result, "comment");
         });
+}
 
-        var delete = new Command("delete", "Remover comentário") { commentIdArg };
-        delete.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CommentDeleteSettings : GlobalSettings
+{
+    [CommandArgument(0, "<commentId>")]
+    public string CommentId { get; set; } = default!;
+}
+
+public class CommentDeleteCommand : AsyncCommand<CommentDeleteSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CommentDeleteSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var commentId = ctx.ParseResult.GetValueForArgument(commentIdArg);
-            var (taskId, resolvedCommentId) = await ResolveCommentAsync(client, commentId, ct);
+            var (taskId, resolvedCommentId) = await Program.ResolveCommentAsync(client, settings.CommentId, ct);
             if (taskId is null || resolvedCommentId is null)
             {
-                throw new CliException(2, $"Comentário '{commentId}' não encontrado.");
+                throw new CliException(2, $"Comentário '{settings.CommentId}' não encontrado.");
             }
 
             await client.DeleteAsync($"/api/tasks/{taskId}/comments/{resolvedCommentId}", ct);
-            return await WriteOutputAsync(ctx, null);
+            return await Program.WriteOutputAsync(settings.Json, null);
         });
+}
 
-        comment.AddCommand(list);
-        comment.AddCommand(add);
-        comment.AddCommand(update);
-        comment.AddCommand(delete);
-        return comment;
-    }
+public class AttachmentUploadSettings : GlobalSettings
+{
+    [CommandArgument(0, "<identifier>")]
+    public string Identifier { get; set; } = default!;
 
-    private static Command CreateAttachmentCommand()
-    {
-        var attachment = new Command("attachment", "Gerenciar anexos");
+    [CommandArgument(1, "<file>")]
+    public string File { get; set; } = default!;
 
-        var uploadTaskArg = new Argument<string>("identifier", "Identificador da issue");
-        var fileArg = new Argument<string>("file", "Caminho do arquivo");
-        var kindOpt = new Option<string>("--kind", () => "file", "Tipo do anexo");
-        var upload = new Command("upload", "Enviar anexo") { uploadTaskArg, fileArg, kindOpt };
-        upload.Handler = new AsyncHandler(async (ctx, ct) =>
+    [CommandOption("--kind")]
+    public string Kind { get; set; } = "file";
+}
+
+public class AttachmentUploadCommand : AsyncCommand<AttachmentUploadSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, AttachmentUploadSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var identifier = ctx.ParseResult.GetValueForArgument(uploadTaskArg);
-            var path = ctx.ParseResult.GetValueForArgument(fileArg);
-            if (!File.Exists(path))
+            if (!File.Exists(settings.File))
             {
-                throw new CliException(2, $"Arquivo '{path}' não encontrado.");
+                throw new CliException(2, $"Arquivo '{settings.File}' não encontrado.");
             }
 
-            var id = await ResolveTaskIdAsync(client, identifier, ct);
+            var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
             if (id is null)
             {
-                throw new CliException(2, $"Issue '{identifier}' não encontrada.");
+                throw new CliException(2, $"Issue '{settings.Identifier}' não encontrada.");
             }
 
             using var content = new MultipartFormDataContent();
             content.Add(new StringContent(id), "taskId");
-            content.Add(new StringContent(ctx.ParseResult.GetValueForOption(kindOpt)!), "kind");
-            using var stream = File.OpenRead(path);
+            content.Add(new StringContent(settings.Kind), "kind");
+            using var stream = File.OpenRead(settings.File);
             var fileContent = new StreamContent(stream);
             fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            content.Add(fileContent, "file", Path.GetFileName(path));
+            content.Add(fileContent, "file", Path.GetFileName(settings.File));
 
             var result = await client.PostMultipartAsync("/api/attachments", content, ct);
-            return await WriteOutputAsync(ctx, result, "attachment");
+            return await Program.WriteOutputAsync(settings.Json, result, "attachment");
         });
+}
 
-        var downloadIdArg = new Argument<string>("attachmentId", "ID do anexo");
-        var outputArg = new Argument<string>("output", "Caminho de saída");
-        var download = new Command("download", "Baixar anexo") { downloadIdArg, outputArg };
-        download.Handler = new AsyncHandler(async (ctx, ct) =>
+public class AttachmentDownloadSettings : GlobalSettings
+{
+    [CommandArgument(0, "<attachmentId>")]
+    public string AttachmentId { get; set; } = default!;
+
+    [CommandArgument(1, "<output>")]
+    public string Output { get; set; } = default!;
+}
+
+public class AttachmentDownloadCommand : AsyncCommand<AttachmentDownloadSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, AttachmentDownloadSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
-            var id = ctx.ParseResult.GetValueForArgument(downloadIdArg);
-            var output = ctx.ParseResult.GetValueForArgument(outputArg);
-            using var stream = File.Create(output);
-            await client.DownloadAsync($"/api/attachments/{id}/download", stream, ct);
-            var node = new JsonObject { ["downloaded"] = output };
-            return await WriteOutputAsync(ctx, node);
+            using var stream = File.Create(settings.Output);
+            await client.DownloadAsync($"/api/attachments/{settings.AttachmentId}/download", stream, ct);
+            var node = new JsonObject { ["downloaded"] = settings.Output };
+            return await Program.WriteOutputAsync(settings.Json, node);
         });
+}
 
-        attachment.AddCommand(upload);
-        attachment.AddCommand(download);
-        return attachment;
-    }
+public class CloudLoginSettings : GlobalSettings
+{
+    [CommandArgument(0, "<url>")]
+    public string? CloudUrlArg { get; set; }
+}
 
-    private static Command CreateCloudCommand()
-    {
-        var cloud = new Command("cloud", "Gerenciar conexão com a nuvem");
-
-        var cloudUrlArg = new Argument<string?>("url", () => null, "URL da nuvem");
-
-        var login = new Command("login", "Conectar à nuvem") { cloudUrlArg };
-        login.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CloudLoginCommand : AsyncCommand<CloudLoginSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CloudLoginSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
             var config = CliConfigService.Load();
-            var url = ctx.ParseResult.GetValueForArgument(cloudUrlArg);
-            if (!string.IsNullOrWhiteSpace(url))
+            if (!string.IsNullOrWhiteSpace(settings.CloudUrlArg))
             {
-                config.CloudUrl = url;
+                config.CloudUrl = settings.CloudUrlArg;
                 CliConfigService.Save(config);
             }
 
@@ -634,44 +784,53 @@ internal static class Program
                 ["connected"] = true,
                 ["cloudUrl"] = config.CloudUrl,
             };
-            return await WriteOutputAsync(ctx, node);
+            return await Program.WriteOutputAsync(settings.Json, node);
         });
+}
 
-        var status = new Command("status", "Status da nuvem");
-        status.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CloudStatusSettings : GlobalSettings
+{
+}
+
+public class CloudStatusCommand : AsyncCommand<CloudStatusSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CloudStatusSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
             var result = await client.GetAsync("/api/local/cloud-session", ct);
-            return await WriteOutputAsync(ctx, result);
+            return await Program.WriteOutputAsync(settings.Json, result);
         });
+}
 
-        var logout = new Command("logout", "Desconectar da nuvem");
-        logout.Handler = new AsyncHandler(async (ctx, ct) =>
+public class CloudLogoutSettings : GlobalSettings
+{
+}
+
+public class CloudLogoutCommand : AsyncCommand<CloudLogoutSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, CloudLogoutSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
-            var client = CreateClient(ctx);
             var config = CliConfigService.Load();
             await client.PutAsync("/api/local/cloud-session", new { connected = false }, ct);
             config.CloudUrl = null;
             CliConfigService.Save(config);
             var node = new JsonObject { ["connected"] = false };
-            return await WriteOutputAsync(ctx, node);
+            return await Program.WriteOutputAsync(settings.Json, node);
         });
+}
 
-        cloud.AddCommand(login);
-        cloud.AddCommand(status);
-        cloud.AddCommand(logout);
-        return cloud;
-    }
+public class ContextCurrentSettings : GlobalSettings
+{
+}
 
-    private static Command CreateContextCommand()
-    {
-        var context = new Command("context", "Contexto atual");
-
-        var current = new Command("current", "Exibir contexto");
-        current.Handler = new AsyncHandler(async (ctx, ct) =>
+public class ContextCurrentCommand : AsyncCommand<ContextCurrentSettings>
+{
+    public override async Task<int> ExecuteAsync(CommandContext context, ContextCurrentSettings settings)
+        => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
-            var url = GetBaseUrl(ctx);
+            var url = Program.ResolveBaseUrl(settings.Url);
             var node = new JsonObject
             {
                 ["baseUrl"] = url,
@@ -679,26 +838,6 @@ internal static class Program
                 ["currentWorkspace"] = config.CurrentWorkspace,
                 ["cloudUrl"] = config.CloudUrl,
             };
-            return await WriteOutputAsync(ctx, node);
+            return await Program.WriteOutputAsync(settings.Json, node);
         });
-
-        context.AddCommand(current);
-        return context;
-    }
-
-    private sealed class AsyncHandler : ICommandHandler
-    {
-        private readonly Func<InvocationContext, CancellationToken, Task<int>> _action;
-
-        public AsyncHandler(Func<InvocationContext, CancellationToken, Task<int>> action)
-        {
-            _action = action;
-        }
-
-        public int Invoke(InvocationContext context)
-            => _action(context, context.GetCancellationToken()).GetAwaiter().GetResult();
-
-        public Task<int> InvokeAsync(InvocationContext context)
-            => _action(context, context.GetCancellationToken());
-    }
 }

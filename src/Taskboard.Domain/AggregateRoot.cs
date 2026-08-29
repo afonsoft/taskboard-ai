@@ -1,8 +1,6 @@
-using Volo.Abp.Domain.Entities;
-
 namespace Taskboard;
 
-public abstract class AggregateRoot<TKey> : BasicAggregateRoot<TKey>, IEntity<TKey>
+public abstract class AggregateRoot<TKey> : Entity<TKey>
     where TKey : notnull
 {
     private readonly List<IDomainEvent> _domainEvents = new();
@@ -18,19 +16,11 @@ public abstract class AggregateRoot<TKey> : BasicAggregateRoot<TKey>, IEntity<TK
     {
     }
 
-    protected void AddDomainEvent(IDomainEvent domainEvent)
-    {
-        _domainEvents.Add(domainEvent);
-        AddLocalEvent(domainEvent);
-    }
+    protected void AddDomainEvent(IDomainEvent domainEvent) => _domainEvents.Add(domainEvent);
 
     public IReadOnlyCollection<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
-    public void ClearDomainEvents()
-    {
-        _domainEvents.Clear();
-        ClearLocalEvents();
-    }
+    public void ClearDomainEvents() => _domainEvents.Clear();
 
     protected void IncrementVersion()
     {

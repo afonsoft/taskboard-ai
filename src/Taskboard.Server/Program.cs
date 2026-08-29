@@ -117,6 +117,14 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<TaskboardDbContext>();
     await dbContext.Database.MigrateAsync();
+
+    var projectRepo = scope.ServiceProvider.GetRequiredService<IRepository<Project>>();
+    var localId = ProjectId.From("local");
+    if (!await projectRepo.Query.AnyAsync(p => p.Id == localId, CancellationToken.None))
+    {
+        await projectRepo.AddAsync(Project.Create(localId, "Local", null), CancellationToken.None);
+        await projectRepo.SaveChangesAsync(CancellationToken.None);
+    }
 }
 
 var api = app.MapGroup("/api");

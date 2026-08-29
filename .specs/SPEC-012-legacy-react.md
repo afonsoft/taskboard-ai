@@ -1,4 +1,4 @@
-# SPEC-008 (legacy): Frontend React original
+# SPEC-012 (legacy): Frontend React original
 
 ## 0. SPEC Metadata
 
@@ -11,7 +11,7 @@
 | Repository | afonsoft/taskboard-ai |
 | Suggested branch | — |
 | Technical owner | afonsoft |
-| Status | Draft |
+| Status | Implemented |
 | Date | 2026-08-24 |
 | Target agent | Devin |
 

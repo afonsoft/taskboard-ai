@@ -8,7 +8,8 @@
     <AssemblyName>taskctl</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Spectre.Console" />
+    <PackageReference Include="Spectre.Console.Cli" />
     <ProjectReference Include="../Taskboard.Application.Contracts/Taskboard.Application.Contracts.csproj" />
   </ItemGroup>
 </Project>

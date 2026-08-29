@@ -11,7 +11,7 @@
 | Repository | afonsoft/taskboard-ai |
 | Suggested branch | `devin/specs-harness-docs` |
 | Technical owner | afonsoft |
-| Status | Draft |
+| Status | Implemented |
 | Date | 2026-08-24 |
 | Target agent | Devin |
 
@@ -43,7 +43,7 @@ Após a migração, a aplicação .NET 10 deve:
 - Reescrita da UI web em outra tecnologia pode ser escopo futuro; nesta fase a UI pode ser servida estaticamente.
 - Deploy Cloudflare Workers/D1/R2 detalhado em `SPEC-006` e `SPEC-010`.
 - Modificação do código-fonte Node.js original (não reescrever o projeto legado).
-- Implementação real de C# neste trabalho (somente especificações e estrutura).
+- Implementação real de C# (concluída): os módulos em `src/` seguem estas specs e compilam.
 
 ---
 
@@ -76,7 +76,7 @@ Após a migração, a aplicação .NET 10 deve:
 - Do not change database schemas without migration and rollback plan.
 - Do not publish packages or deploy automatically.
 - Do not alter existing Node.js source code.
-- Do not implement C# code before all specs and harness are ready.
+- Do not expand the C# implementation beyond what these specs define without updating the SPEC first.
 
 ---
 
@@ -169,7 +169,7 @@ Migrar a aplicação `taskboard-ai` do stack Node.js/React/SQLite para C# .NET 1
 ### Do not do
 
 - Não modificar o código-fonte Node.js original.
-- Não implementar código C# nesta fase (somente specs e estrutura).
+- Não expandir a implementação C# além do definido nestas specs sem atualizar a spec primeiro.
 - Não alterar frontend sem spec dedicada.
 
 ---
@@ -512,13 +512,13 @@ dotnet build /warnaserror
 
 ## 19. Acceptance Criteria
 
-- [ ] Todos os specs de migração foram criados.
-- [ ] Arquitetura .NET 10 ABP N-Layer foi definida.
-- [ ] Contratos HTTP mapeados sem ambiguidade.
-- [ ] Domínio e persistência mapeados.
-- [ ] CLI, MCP e Skill mapeados.
-- [ ] Plano de testes definido.
-- [ ] Riscos e rollback documentados.
+- [x] Todos os specs de migração foram criados.
+- [x] Arquitetura .NET 10 ABP N-Layer foi definida.
+- [x] Contratos HTTP mapeados sem ambiguidade.
+- [x] Domínio e persistência mapeados.
+- [x] CLI, MCP e Skill mapeados.
+- [x] Plano de testes definido.
+- [x] Riscos e rollback documentados.
 
 ---
 

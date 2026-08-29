@@ -9,7 +9,6 @@ using Taskboard.Dtos;
 using Taskboard.Repositories;
 using Taskboard.Requests;
 using Taskboard.ValueObjects;
-using Volo.Abp.Uow;
 
 namespace Taskboard.Application.AiChat;
 
@@ -21,7 +20,6 @@ public sealed class AiChatService
     private readonly IRepository<Project> _projectRepo;
     private readonly ILLMProvider _llmProvider;
     private readonly IThreadEventStreamService _threadEvents;
-    private readonly IUnitOfWork _unitOfWork;
 
     public AiChatService(
         IRepository<AiChatThread> threadRepo,
@@ -29,8 +27,7 @@ public sealed class AiChatService
         IRepository<AiChatEvent> eventRepo,
         IRepository<Project> projectRepo,
         ILLMProvider llmProvider,
-        IThreadEventStreamService threadEvents,
-        IUnitOfWork unitOfWork)
+        IThreadEventStreamService threadEvents)
     {
         _threadRepo = threadRepo;
         _runRepo = runRepo;
@@ -38,7 +35,6 @@ public sealed class AiChatService
         _projectRepo = projectRepo;
         _llmProvider = llmProvider;
         _threadEvents = threadEvents;
-        _unitOfWork = unitOfWork;
     }
 
     public async Task<AiChatThreadDto> CreateThreadAsync(
@@ -64,7 +60,7 @@ public sealed class AiChatService
             Sandbox.From(request.Sandbox));
 
         await _threadRepo.AddAsync(thread, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await _threadRepo.SaveChangesAsync(ct);
 
         return thread.ToDto();
     }
@@ -94,7 +90,7 @@ public sealed class AiChatService
 
         var run = thread.StartRun();
         await _runRepo.AddAsync(run, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await _threadRepo.SaveChangesAsync(ct);
 
         // Start the AI run asynchronously
         _ = System.Threading.Tasks.Task.Run(() => ExecuteRunAsync(thread.Id, run.Id, ct));
@@ -166,7 +162,7 @@ public sealed class AiChatService
             thread.SetStatus(AiChatThreadStatus.Idle);
             await _runRepo.UpdateAsync(run, ct);
             await _threadRepo.UpdateAsync(thread, ct);
-            await _unitOfWork.SaveChangesAsync(ct);
+            await _threadRepo.SaveChangesAsync(ct);
         }
         catch (Exception)
         {
@@ -185,7 +181,7 @@ public sealed class AiChatService
                 await _threadRepo.UpdateAsync(thread, ct);
             }
             
-            await _unitOfWork.SaveChangesAsync(ct);
+            await _threadRepo.SaveChangesAsync(ct);
         }
     }
 
@@ -210,7 +206,7 @@ public sealed class AiChatService
 
         thread.AddEvent(chatEvent);
         await _eventRepo.AddAsync(chatEvent, ct);
-        await _unitOfWork.SaveChangesAsync(ct);
+        await _threadRepo.SaveChangesAsync(ct);
 
         await _threadEvents.PublishAsync(
             threadId.Value,

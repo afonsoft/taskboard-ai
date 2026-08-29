@@ -20,7 +20,7 @@ The merged set consolidates content from the original `.specs/` and `.specs2/` d
 | [SPEC-006-cloud.md](SPEC-006-cloud.md) | Cloud | Cloud companion, Cloudflare D1/R2 proxy, Basic Auth |
 | [SPEC-007-workflow-automation.md](SPEC-007-workflow-automation.md) | Workflow | Workflow graph engine, Codex automation, device workspaces |
 | [SPEC-008-frontend.md](SPEC-008-frontend.md) | Frontend | Blazor / .NET MAUI rewrite strategy |
-| [SPEC-008-legacy-react.md](SPEC-008-legacy-react.md) | Frontend (ref) | Reference for the original React/Vite UI |
+| [SPEC-012-legacy-react.md](SPEC-012-legacy-react.md) | Frontend (ref) | Reference for the original React/Vite UI |
 | [SPEC-009-skill.md](SPEC-009-skill.md) | Skills | `manage-taskboard` agent skill and references |
 | [SPEC-010-integrations.md](SPEC-010-integrations.md) | Integrations | Jira sync, DeepSeek harness, shared execution modules |
 | [SPEC-011-persistence.md](SPEC-011-persistence.md) | Persistence | EF Core + SQLite schema, migrations, indexes, repositories |

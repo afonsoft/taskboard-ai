@@ -1,6 +1,5 @@
 using Taskboard;
 using Taskboard.ValueObjects;
-using Volo.Abp.Domain.Entities;
 
 namespace Taskboard.Domain.Entities;
 

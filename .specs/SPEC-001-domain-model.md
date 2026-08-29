@@ -11,7 +11,7 @@
 | Repository | afonsoft/taskboard-ai |
 | Suggested branch | `devin/spec-domain-net10` |
 | Technical owner | afonsoft |
-| Status | Draft |
+| Status | Implemented |
 | Date | 2026-08-24 |
 | Target agent | Devin |
 
@@ -330,7 +330,17 @@ public sealed class Project : AggregateRoot<ProjectId>
     public string? WorkspacePath { get; private set; }
     public IReadOnlyCollection<string> Labels => _labels.AsReadOnly();
     public long NextTaskNumber { get; private set; } = 1;
-    // factory, methods...
+
+    public static Project Create(ProjectId id, string name, string? workspacePath)
+        => new(id, name, workspacePath);
+
+    public TaskIdentifier GenerateTaskIdentifier()
+    {
+        var number = NextTaskNumber++;
+        return TaskIdentifier.From($"TASK-{Id.Value}-{number}");
+    }
+
+    public void AddLabel(string label) => _labels.Add(label);
 }
 
 public sealed class Task : AggregateRoot<TaskId>

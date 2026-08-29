@@ -49,7 +49,8 @@ domain-model
 
 | Module | Project | Target |
 |---|---|---|
-| domain-model | `src/Taskboard.Domain` | `net10.0` |
+| domain-model | `src/Taskboard.Domain.Shared` + `src/Taskboard.Domain` | `net10.0` |
+| application | `src/Taskboard.Application.Contracts` + `src/Taskboard.Application` | `net10.0` |
 | persistence | `src/Taskboard.EntityFrameworkCore` | `net10.0` |
 | rest-api | `src/Taskboard.Server` | `net10.0` |
 | cli | `src/Taskboard.Cli` | `net10.0` |
@@ -73,8 +74,8 @@ domain-model
 
 ## Acceptance gates
 
-- [ ] `Taskboard.Domain` compiles with `TreatWarningsAsErrors`.
-- [ ] `Taskboard.EntityFrameworkCore` migration runs and seeds `local` project.
-- [ ] `Taskboard.Server` starts and exposes `/health`.
-- [ ] `taskctl project list --json` returns the `local` project.
-- [ ] MCP `list_projects` tool returns the same JSON.
+- [x] `Taskboard.Domain` compiles with `TreatWarningsAsErrors`.
+- [x] `Taskboard.EntityFrameworkCore` migration runs and seeds the `local` project *(idempotent seed added in `Program.cs` after `MigrateAsync`)*.
+- [x] `Taskboard.Server` starts and exposes `/health` *(verified by `tests/Taskboard.Tests.Integration`)*.
+- [x] `taskctl project list --json` returns the `local` project.
+- [x] MCP `list_projects` tool returns the same JSON.

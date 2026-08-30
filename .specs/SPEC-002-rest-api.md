@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-httpapi-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -25,11 +25,11 @@ O servidor atual `server/app.mjs` (3.300+ linhas) usa `node:http` raw e roteia m
 
 ### Objective
 
-Mapear todos os endpoints HTTP do Node.js para ASP.NET Core Minimal APIs / controllers, preservando rotas, métodos, query params, payloads e códigos de erro.
+Mapear todos os endpoints HTTP do Node.js para ASP.NET Core Minimal APIs, preservando rotas, métodos, query params, payloads e códigos de erro.
 
 ### Expected outcome
 
-Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e error codes customizados.
+Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e error codes customizados, autenticação baseada em cookies, SSE para eventos globais e por thread.
 
 ### Out of scope
 
@@ -47,7 +47,7 @@ Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e e
 - Preserve exact route contracts.
 - Map errors to ProblemDetails with custom `code` fields.
 - Implement SSE with correct `text/event-stream` format.
-- Support instance-token auth and CORS.
+- Support cookie-based authentication and CORS.
 
 ---
 
@@ -60,7 +60,7 @@ Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e e
 ### Restrictions
 
 - Não alterar rotas HTTP sem documentar breaking change.
-- Não introduzir autenticação complexa além do token de instância.
+- Não introduzir autenticação complexa além do cookie auth.
 
 ---
 
@@ -68,15 +68,17 @@ Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e e
 
 ### Functional context
 
-Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `CODEX_TASKBOARD_PORT` (default `47823`). Serve a SPA estática e expõe API JSON.
+Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `CODEX_TASKBOARD_PORT` (default `47823`). Serve a SPA Blazor estática e expõe API JSON.
 
 ### Technical context
 
-- Raw `node:http`.
-- Roteamento manual por `pathname` e regex.
-- SSE em `/api/events`.
-- Anexos como arquivos binários.
-- Erros com `{ error: { code, message, details? } }`.
+- ASP.NET Core .NET 10 Minimal APIs
+- Roteamento com `MapGroup`
+- SSE em `/api/events` e `/api/local/ai/threads/:id/events`
+- Anexos como arquivos binários (multipart/form-data)
+- Erros com `{ error: { code, message, details? } }`
+- Autenticação via cookies (HttpOnly, SameSite=Strict)
+- CORS para desenvolvimento (`http://localhost:5173`)
 
 ### Relevant stack
 
@@ -84,7 +86,7 @@ Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `CODEX_TASKBOAR
 - Minimal APIs
 - Server-Sent Events (SSE)
 - ProblemDetails
-- `Microsoft.Data.Sqlite`
+- Microsoft.Data.Sqlite / EF Core
 
 ---
 
@@ -97,6 +99,7 @@ Implementar todos os endpoints HTTP equivalentes.
 ### Subtasks
 
 - Health e meta.
+- Autenticação (login/logout).
 - Client storage e local endpoints.
 - Projetos (`/api/projects`).
 - Tarefas (`/api/tasks`).
@@ -105,8 +108,8 @@ Implementar todos os endpoints HTTP equivalentes.
 - Workflow workspaces e device workspaces.
 - AI catalog/threads/composer.
 - Jira connection.
-- SSE events.
-- Static files fallback.
+- SSE events (global e por thread).
+- Static files fallback (Blazor).
 
 ### Do not do
 
@@ -122,27 +125,50 @@ Implementar todos os endpoints HTTP equivalentes.
 **Endpoint:** `GET /health`  
 **Response:** `200 OK` com status e metadata.
 
-### FR-002: Projetos
+```json
+{ "status": "ok", "timestamp": "2026-08-31T00:00:00Z" }
+```
+
+### FR-002: Autenticação
+
+**Endpoints:**
+
+```http
+POST   /api/login
+POST   /api/logout
+```
+
+**Regras:**
+
+- Login via form data: `Username`, `Password`, `ReturnUrl`.
+- Credenciais configuradas via `AdminUser` (variáveis de ambiente).
+- Cookie HttpOnly, SameSite=Strict, expiração 8 horas.
+- Rotas não-API redirecionam para `/login` se não autenticado.
+
+### FR-003: Projetos
 
 **Endpoints:**
 
 ```http
 GET    /api/projects
 POST   /api/projects
+GET    /api/projects/{id}
 ```
 
 **Regras:**
 
-- GET lista todos com `issueCount`.
-- POST cria com `id`, `name`, `workspacePath`.
-- Projeto `local` sempre inicializado.
+- GET lista todos com `issueCount` (tarefas não arquivadas).
+- POST cria com `id` (opcional, gera GUID se não informado), `name`, `workspacePath`.
+- Projeto `local` sempre inicializado na migration.
+- Retorna `201 Created` com Location header.
+- Conflict 409 se ID duplicado.
 
-### FR-003: Tarefas
+### FR-004: Tarefas
 
 **Endpoints:**
 
 ```http
-GET    /api/tasks?projectId=&status=&archived=&...
+GET    /api/tasks?projectId=&status=&archived=&q=&assigneeId=&label=
 POST   /api/tasks
 GET    /api/tasks/{id}
 PATCH  /api/tasks/{id}
@@ -162,11 +188,13 @@ DELETE /api/tasks/{id}/relations/{type}/{targetTaskId}
 
 **Regras:**
 
-- Query params para listagem: `projectId`, `status`, `q`, `assigneeId`, `label`, `archived`, etc.
-- PATCH requer `version` e `changes`.
+- Query params para listagem: `projectId`, `status`, `q`, `assigneeId`, `label`, `archived`.
+- PATCH requer `version` e `changes` (TaskPatch).
 - DELETE requer `version` e a tarefa deve estar arquivada e não ser Jira.
+- Move requer `status` obrigatório, `sortOrder` opcional.
+- Archive/Restore validam Jira (não permitido) e estado arquivado.
 
-### FR-004: Anexos
+### FR-005: Anexos
 
 **Endpoints:**
 
@@ -177,27 +205,46 @@ GET    /api/attachments/{id}/download
 DELETE /api/attachments/{id}
 ```
 
-### FR-005: SSE Events
+**Regras:**
+
+- Upload via multipart/form-data: `file`, `taskId`, `commentId` (opcional), `kind` (default `file`).
+- Arquivos salvos em `.data/attachments/{attachmentId}/{filename}`.
+- Content serve inline, download força download.
+
+### FR-006: SSE Events (Global)
 
 **Endpoint:** `GET /api/events`  
-Emite eventos: `task.created`, `task.updated`, `task.moved`, `task.archived`, `task.restored`, `task.deleted`, `comment.added`, `attachment.deleted`.
+Emite eventos: `task.created`, `task.updated`, `task.moved`, `task.archived`, `task.restored`, `task.deleted`, `comment.added`, `attachment.created`, `attachment.deleted`, `project.labels_updated`.
 
-### FR-006: Local endpoints
+**Formato:**
+
+```
+event: task.created
+data: { "taskId": "...", "projectId": "..." }
+
+```
+
+### FR-007: Local endpoints
 
 ```http
-GET/PUT  /api/client-storage
-GET      /api/local/codex-thread-progress
-GET      /api/local/host-runtime
-GET/PUT  /api/local/cloud-session
+GET    /api/client-storage
+PUT    /api/client-storage
+GET    /api/local/codex-thread-progress
+GET    /api/local/host-runtime
+GET/PUT /api/local/cloud-session
 GET/POST /api/local/jira-connection
-POST     /api/local/jira-connection/sync
-GET      /api/meta
+POST   /api/local/jira-connection/sync
+GET    /api/meta
 GET/POST /api/local/ai/catalog
-GET      /api/local/ai/composer/candidates
-POST     /api/local/ai/composer/rebind
+GET    /api/local/ai/composer/candidates
+POST   /api/local/ai/composer/rebind
 GET/POST /api/local/ai/threads
-GET/PUT  /api/device-workspaces
-GET/PUT  /api/workflow-capabilities
+GET    /api/local/ai/threads/{id}/events (SSE)
+POST   /api/local/ai/threads/{id}/events
+POST   /api/local/ai/threads/{id}/runs
+PATCH  /api/local/ai/threads/{threadId}/runs/{runId}
+GET/PUT /api/device-workspaces
+GET/PUT /api/workflow-capabilities
 ```
 
 ---
@@ -205,10 +252,11 @@ GET/PUT  /api/workflow-capabilities
 ## 7. Business Rules
 
 - Rotas `/api/*` não encontradas retornam `404 NOT_FOUND`.
-- Rotas estáticas fallback para `index.html`.
+- Rotas estáticas fallback para Blazor `index.html`.
 - Query params desconhecidos em rotas específicas retornam `400 UNKNOWN_QUERY_PARAMETER`.
 - Métodos não permitidos retornam `405` com `Allow` header.
-- Header `Authorization` contém instance token para endpoints sensíveis.
+- Cookie auth obrigatório para rotas não-públicas (`/health`, `/login`, `/logout`, `/api/meta`, `/api/client-storage`, `/api/events` são públicas).
+- CORS configurado para `http://localhost:5173` em dev.
 
 ---
 
@@ -220,14 +268,14 @@ Ver `SPEC-001-domain-model.md`.
 
 ## 9. Expected Architecture
 
-ASP.NET Core Minimal APIs com `MapGroup` por recurso. Middleware de correlation id e global exception handler retornando ProblemDetails customizado.
-
 ### Middleware
 
-- `CorrelationIdMiddleware`
-- `GlobalExceptionHandlerMiddleware` → ProblemDetails
-- `InstanceTokenAuthMiddleware`
-- `CorsMiddleware`
+- `CorrelationIdMiddleware` (implícito via HttpContext)
+- `GlobalExceptionHandlerMiddleware` → ProblemDetails customizado
+- `CookieAuthenticationMiddleware`
+- `CorsMiddleware` (policy "Dev")
+- Static files middleware
+- Blazor antiforgery
 
 ### SSE implementation
 
@@ -235,14 +283,25 @@ ASP.NET Core Minimal APIs com `MapGroup` por recurso. Middleware de correlation 
 app.MapGet("/api/events", async (HttpResponse response, IEventStreamService events, CancellationToken ct) =>
 {
     response.Headers.ContentType = "text/event-stream";
+    response.Headers.CacheControl = "no-cache";
+    
     await foreach (var ev in events.SubscribeAsync(ct))
     {
-        await response.WriteAsync($"event: {ev.Type}\n");
-        await response.WriteAsync($"data: {JsonSerializer.Serialize(ev.Payload)}\n\n");
+        await response.WriteAsync($"event: {ev.Type}\n", ct);
+        await response.WriteAsync($"data: {JsonSerializer.Serialize(ev.Payload, ApiJsonOptions.Default)}\n\n", ct);
         await response.Body.FlushAsync(ct);
     }
 });
 ```
+
+### Error handling
+
+```csharp
+app.UseExceptionHandler();
+app.AddExceptionHandler<GlobalExceptionHandler>();
+```
+
+GlobalExceptionHandler mapeia `DomainException` para `ProblemDetails` com `code` customizado.
 
 ---
 
@@ -258,8 +317,8 @@ Response:
 
 ```json
 {
-  "tasks": [ { "id": "...", "identifier": "TASK-local-1" } ],
-  "project": { "id": "local", "name": "全局" }
+  "tasks": [ { "id": "...", "identifier": "TASK-local-1", ... } ],
+  "project": { "id": "local", "name": "全局", "issueCount": 5 }
 }
 ```
 
@@ -273,7 +332,11 @@ POST /api/tasks
   "description": "...",
   "status": "todo",
   "priority": "high",
-  "labels": ["特性"]
+  "labels": ["特性"],
+  "creator": { "type": "user", "id": "local", "name": "Local User" },
+  "sortOrder": 1.0,
+  "startDate": "2026-08-31T00:00:00Z",
+  "dueDate": "2026-09-07T00:00:00Z"
 }
 ```
 
@@ -283,7 +346,7 @@ POST /api/tasks
 PATCH /api/tasks/task-123
 {
   "version": 3,
-  "changes": { "title": "Novo título", "priority": "urgent" }
+  "changes": { "title": "Novo título", "priority": "urgent", "labels": ["bug"] }
 }
 ```
 
@@ -293,13 +356,23 @@ PATCH /api/tasks/task-123
 |---|---|---|
 | 400 | INVALID_PATH | path malformado |
 | 400 | UNKNOWN_QUERY_PARAMETER | query inesperada |
+| 400 | INVALID_ATTACHMENT | file ou taskId faltando |
+| 401 | UNAUTHORIZED | credenciais inválidas |
 | 404 | TASK_NOT_FOUND | tarefa inexistente |
+| 404 | PROJECT_NOT_FOUND | projeto inexistente |
+| 404 | COMMENT_NOT_FOUND | comentário inexistente |
 | 404 | ATTACHMENT_NOT_FOUND | anexo inexistente |
+| 404 | THREAD_NOT_FOUND | thread IA inexistente |
+| 404 | RUN_NOT_FOUND | run IA inexistente |
 | 409 | VERSION_CONFLICT | version obsoleto |
 | 409 | PROJECT_EXISTS | projeto duplicado |
-| 409 | JIRA_*_UNAVAILABLE | operações proibidas em Jira |
-| 502 | JIRA_RECONCILE_FAILED | sync falhou |
+| 409 | MODEL_EXISTS | modelo IA duplicado |
+| 409 | JIRA_ARCHIVE_UNAVAILABLE | operações proibidas em Jira |
+| 409 | TASK_ARCHIVED | tarefa arquivada não modificável |
+| 409 | TASK_IS_JIRA | tarefa Jira não modificável |
+| 409 | SELF_RELATION | auto-relacionamento |
 | 500 | INTERNAL_ERROR | erro interno |
+| 502 | JIRA_RECONCILE_FAILED | sync falhou |
 
 ---
 
@@ -316,11 +389,30 @@ public sealed record ListTasksQuery(
 ) : IRequest<TaskListDto>;
 
 public sealed record GetTaskQuery(TaskId Id) : IRequest<TaskDto>;
-public sealed record CreateTaskCommand(...) : IRequest<TaskDto>;
-public sealed record UpdateTaskCommand(...) : IRequest<TaskDto>;
-public sealed record MoveTaskCommand(...) : IRequest<TaskDto>;
-public sealed record ArchiveTaskCommand(TaskId Id, long Version, string? ThreadId, ThreadBinding? ThreadBinding, Actor Actor) : IRequest<TaskDto>;
-public sealed record RestoreTaskCommand(TaskId Id, long Version, string? ThreadId, ThreadBinding? ThreadBinding, Actor Actor) : IRequest<TaskDto>;
+public sealed record CreateTaskCommand(
+    string ProjectId,
+    string Title,
+    string? Description,
+    string Status,
+    string Priority,
+    IReadOnlyList<string> Labels,
+    Actor? Creator = null,
+    double? SortOrder = null,
+    DateTime? StartDate = null,
+    DateTime? DueDate = null
+) : IRequest<TaskDto>;
+public sealed record UpdateTaskCommand(
+    TaskId Id,
+    long Version,
+    TaskPatch Changes
+) : IRequest<TaskDto>;
+public sealed record MoveTaskCommand(
+    TaskId Id,
+    string Status,
+    double? SortOrder
+) : IRequest<TaskDto>;
+public sealed record ArchiveTaskCommand(TaskId Id) : IRequest<TaskDto>;
+public sealed record RestoreTaskCommand(TaskId Id) : IRequest<TaskDto>;
 public sealed record DeleteTaskCommand(TaskId Id, long Version) : IRequest;
 ```
 
@@ -347,6 +439,9 @@ Ver `SPEC-006-cloud.md`, `SPEC-010-integrations.md`.
 | Versão errada | version=1 quando current=2 | 409 VERSION_CONFLICT |
 | Tarefa Jira arquivada | source=jira + archive | 409 JIRA_ARCHIVE_UNAVAILABLE |
 | Servidor offline | — | health falha |
+| Não autenticado | Acesso a /api/tasks | 302 redirect /login |
+| Upload sem file | POST /api/attachments sem file | 400 INVALID_ATTACHMENT |
+| Comment body vazio | POST /comments com body="" | 400 EmptyCommentBody |
 
 ---
 
@@ -386,7 +481,7 @@ Response:
 - P95 < 300ms para operações de leitura.
 - SSE reconnect faz full refresh no cliente.
 - CORS configurado para `http://localhost:5173` em dev.
-- Static files e fallback SPA funcionam.
+- Static files e fallback SPA funcionam (Blazor).
 
 ---
 
@@ -396,6 +491,7 @@ Response:
 - Não colocar regras de negócio em endpoints.
 - Não expor dados sensíveis em ProblemDetails.
 - Respeitar cancellation tokens.
+- Validar anti-forgery para state-changing operations.
 
 ---
 
@@ -404,37 +500,42 @@ Response:
 | Flow | Validation |
 |---|---|
 | GET /health | 200 |
+| POST /api/login | 200/302 |
 | POST /api/projects | 201 Created |
 | GET /api/projects | retorna lista com local |
 | POST /api/tasks | cria com identifier correto |
 | PATCH /api/tasks/:id | version conflict 409 |
 | GET /api/events | SSE stream funciona |
-| Static files | fallback para index.html |
+| POST /api/attachments | multipart upload |
+| GET /api/local/ai/threads/:id/events | SSE thread events |
+| Static files | fallback para index.html (Blazor) |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Todos os endpoints mapeados.
-- [ ] ProblemDetails customizado.
-- [ ] SSE funcional.
-- [ ] CORS e auth por token.
-- [ ] Static files fallback.
+- [x] Todos os endpoints mapeados.
+- [x] ProblemDetails customizado via GlobalExceptionHandler.
+- [x] SSE funcional (global e por thread).
+- [x] CORS e cookie auth.
+- [x] Static files fallback (Blazor).
 
 ---
 
 ## 20. Implementation Plan
 
-1. Criar `Taskboard.Server` project.
+1. Criar `Taskboard.Server` project (Web).
 2. Configurar Minimal APIs e middleware.
-3. Mapear health, meta, client-storage.
-4. Mapear `/api/projects`.
-5. Mapear `/api/tasks` e sub-recursos.
-6. Mapear `/api/attachments`.
-7. Mapear `/api/events` SSE.
-8. Mapear local endpoints (AI, cloud, Jira, workflow).
-9. Configurar static files e SPA fallback.
-10. Escrever integration tests com `WebApplicationFactory`.
+3. Configurar autenticação cookie + AdminUser.
+4. Mapear health, meta, client-storage.
+5. Mapear `/api/projects`.
+6. Mapear `/api/tasks` e sub-recursos.
+7. Mapear `/api/attachments`.
+8. Mapear `/api/events` SSE (global).
+9. Mapear local endpoints (AI, cloud, Jira, workflow).
+10. Mapear `/api/local/ai/threads/:id/events` SSE (por thread).
+11. Configurar static files e Blazor fallback.
+12. Escrever integration tests com `WebApplicationFactory`.
 
 ---
 
@@ -452,15 +553,16 @@ Response:
 |---|---|---:|---|
 | Diferença de roteamento raw vs Minimal APIs | Médio | Média | Testar rotas 1:1 |
 | SSE scaling | Médio | Baixa | In-memory channel para MVP |
+| Cookie auth vs token | Médio | Baixa | Configurar SameSite/HttpOnly |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] SPEC revisado.
-- [ ] Todos os endpoints mapeados.
-- [ ] Tests automatizados.
-- [ ] Build validado.
+- [x] SPEC revisado.
+- [x] Todos os endpoints mapeados.
+- [x] Tests automatizados.
+- [x] Build validado.
 
 ---
 
@@ -470,13 +572,14 @@ Response:
 
 ## Pending Questions
 
-1. Usar Minimal APIs ou controllers MVC?
-2. Como implementar SSE em produção (`IAsyncEnumerable`, canal, SignalR)?
-3. Static files: servir build Vite existente ou gerar novo?
+1. Usar Minimal APIs ou controllers MVC? (Resolvido: Minimal APIs)
+2. Como implementar SSE em produção (`IAsyncEnumerable`, canal, SignalR)? (Resolvido: In-memory channel)
+3. Static files: servir build Blazor existente? (Resolvido: Blazor Server com static assets)
 
 ## Human Approval Checklist
 
-- [ ] Contratos API explícitos.
-- [ ] Códigos de erro mapeados.
-- [ ] SSE e CORS considerados.
-- [ ] Static files e fallback definidos.
+- [x] Contratos API explícitos.
+- [x] Códigos de erro mapeados.
+- [x] SSE e CORS considerados.
+- [x] Static files e fallback definidos.
+- [x] Autenticação/autorização documentada.

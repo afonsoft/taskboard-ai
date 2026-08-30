@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-cloud-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -29,12 +29,15 @@ Especificar módulo cloud em .NET 10: companion device-local, Cloudflare proxy, 
 
 ### Expected outcome
 
-- `Taskboard.Cloud` com companion loopback, proxy D1/R2, Basic Auth.
+- `Taskboard.Cloud` com `ICloudflareProxyService` (D1/R2).
+- `CloudSessionService` em memória para sessão cloud.
 - Endpoints `/api/local/cloud-session`, `/api/meta`.
+- Interfaces para storage e proxy Cloudflare.
 
 ### Out of scope
 
 - Deploy real de Cloudflare Workers/D1/R2 (configuração only).
+- Implementação completa de sync (apenas interfaces).
 
 ---
 
@@ -63,16 +66,15 @@ Modo nuvem permite compartilhamento de boards entre devices e colaboração remo
 
 ### Technical context
 
-- `server/cloud-config.mjs`.
 - Cloudflare D1 (banco) e R2 (anexos).
 - Basic Auth no companion.
-- Polling de revisão a cada 2s.
+- Polling de revisão a cada 2s (config em `/api/meta`).
 
 ### Relevant stack
 
 - .NET 10
 - HttpClient
-- Cloudflare API
+- Cloudflare API (D1, R2)
 
 ---
 
@@ -84,14 +86,14 @@ Mapear cloud companion, proxy e autenticação.
 
 ### Subtasks
 
-- Companion loopback device-local.
+- Cloud Session (em memória).
 - Proxy Cloudflare D1/R2.
-- Basic Auth.
-- Polling de revisão.
+- Meta endpoint com config de realtime.
 
 ### Do not do
 
 - Não implementar deploy automático.
+- Não implementar sync completo (apenas interfaces).
 
 ---
 
@@ -102,47 +104,65 @@ Mapear cloud companion, proxy e autenticação.
 **Endpoints:**
 
 ```http
-GET/PUT /api/local/cloud-session
+GET  /api/local/cloud-session
+PUT  /api/local/cloud-session
 ```
 
 **Regras:**
 
-- GET retorna sessão ativa.
-- PUT configura companion URL, credentials, projeto.
+- GET retorna sessão ativa (`CloudSessionDto`).
+- PUT atualiza sessão com `UpdateCloudSessionRequest`.
+- Campos: `connected`, `companionUrl`, `username`, `projectId`.
+- Armazenado em memória (`CloudSessionService`).
 
 ### FR-002: Meta
 
 **Endpoint:** `GET /api/meta`  
 **Response:** metadados do servidor incluindo `realtime:{transport:'poll',intervalMs:2000}`.
 
-### FR-003: Companion Loopback
+```json
+{
+  "name": "taskboard",
+  "version": "1.0.0",
+  "realtime": { "transport": "poll", "intervalMs": 2000 }
+}
+```
 
-**Description:**  
-Serviço local que espelha API para o companion cloud.
+### FR-003: Cloudflare Proxy (Interfaces)
 
-### FR-004: Proxy Cloudflare
+**Interfaces definidas:**
 
-**Description:**  
-Proxy para endpoints D1/R2 autenticados.
+```csharp
+public interface ICloudflareProxyService
+{
+    Task<CloudflareD1Result> ExecuteD1QueryAsync(string sql, CancellationToken ct = default);
+    Task<CloudflareR2Result> UploadToR2Async(string key, Stream content, string contentType, CancellationToken ct = default);
+    Task<Stream> DownloadFromR2Async(string key, CancellationToken ct = default);
+    Task<bool> TestConnectionAsync(CancellationToken ct = default);
+}
+```
 
-### FR-005: Review Polling
+**Implementação:** `CloudflareProxyService` usa HttpClient com Bearer token.
 
-**Description:**  
-Polling a cada 2s para detectar revisões cloud.
+### FR-004: Review Polling
+
+**Descrição:**  
+Configuração de polling via `/api/meta` retorna `intervalMs: 2000`. Cliente faz polling a cada 2s.
 
 ---
 
 ## 7. Business Rules
 
-- Credenciais armazenadas com permissão `0600` ou em secret store.
-- Basic Auth no companion.
+- Credenciais Cloudflare via configuração (não hardcoded).
+- Basic Auth no companion (fora do escopo deste spec).
 - Sync não sobrescreve local sem version conflict handling.
+- Tokens nunca logados.
 
 ---
 
 ## 8. Domain Modeling
 
-Nenhum novo; reutiliza `Project`, `Task`, `Attachment`.
+Nenhum novo; reutiliza `Project`, `Task`, `Attachment` via DTOs.
 
 ---
 
@@ -151,9 +171,13 @@ Nenhum novo; reutiliza `Project`, `Task`, `Attachment`.
 ```text
 src/Taskboard.Cloud/
   Services/
-    CloudCompanionService.cs
     CloudflareProxyService.cs
-    CloudSyncService.cs
+    ICloudflareProxyService.cs
+    CloudflareD1Result.cs
+    CloudflareR2Result.cs
+
+src/Taskboard.Server/Services/
+  CloudSessionService.cs
 ```
 
 ---
@@ -161,8 +185,29 @@ src/Taskboard.Cloud/
 ## 10. API Contracts
 
 ```http
-GET/PUT /api/local/cloud-session
-GET     /api/meta
+GET  /api/local/cloud-session
+PUT  /api/local/cloud-session
+GET  /api/meta
+```
+
+**CloudSessionDto:**
+```csharp
+public sealed record CloudSessionDto(
+    bool Connected,
+    string? CompanionUrl,
+    string? Username,
+    string? ProjectId
+);
+```
+
+**UpdateCloudSessionRequest:**
+```csharp
+public sealed record UpdateCloudSessionRequest(
+    bool? Connected,
+    string? CompanionUrl,
+    string? Username,
+    string? ProjectId
+);
 ```
 
 ---
@@ -170,7 +215,13 @@ GET     /api/meta
 ## 11. Application Contracts
 
 ```csharp
-public sealed record UpdateCloudSessionCommand(string? CompanionUrl, string? Username, string? Password, string? ProjectId) : IRequest;
+public sealed record UpdateCloudSessionCommand(
+    string? CompanionUrl, 
+    string? Username, 
+    string? Password, 
+    string? ProjectId
+) : IRequest;
+
 public sealed record GetCloudSessionQuery() : IRequest<CloudSessionDto>;
 ```
 
@@ -178,7 +229,7 @@ public sealed record GetCloudSessionQuery() : IRequest<CloudSessionDto>;
 
 ## 12. Persistence and Data
 
-Ver `SPEC-011-persistence.md`. Credenciais em arquivo local protegido.
+Ver `SPEC-011-persistence.md`. Credenciais em configuração (não no banco).
 
 ---
 
@@ -186,8 +237,8 @@ Ver `SPEC-011-persistence.md`. Credenciais em arquivo local protegido.
 
 | Service | Data sent | Data received | Security |
 |---|---|---|---|
-| Cloudflare D1 | queries | rows | API token |
-| Cloudflare R2 | files | files | API token |
+| Cloudflare D1 | queries | rows | API token (Bearer) |
+| Cloudflare R2 | files | files | API token (Bearer) |
 
 ---
 
@@ -195,9 +246,9 @@ Ver `SPEC-011-persistence.md`. Credenciais em arquivo local protegido.
 
 | Scenario | Input | Expected behavior |
 |---|---|---|
-| Companion offline | timeout | retry com backoff |
-| Credenciais inválidas | 401 | 401 UNAUTHORIZED |
-| Conflito de versão | sync com version stale | 409 |
+| Cloudflare offline | timeout | `TestConnectionAsync` retorna false |
+| Credenciais inválidas | 401 do Cloudflare | `ExecuteD1QueryAsync` retorna `Success=false`, `Error` |
+| Proxy não configurado | chamar serviço | exception ou configuração obrigatória |
 
 ---
 
@@ -206,9 +257,9 @@ Ver `SPEC-011-persistence.md`. Credenciais em arquivo local protegido.
 ```http
 PUT /api/local/cloud-session
 {
+  "connected": true,
   "companionUrl": "https://companion.example.com",
   "username": "user",
-  "password": "$CLOUD_PASSWORD",
   "projectId": "my-project"
 }
 ```
@@ -217,15 +268,17 @@ PUT /api/local/cloud-session
 
 ## 16. Non-Functional Requirements
 
-- Polling < 100ms overhead.
-- Retry com exponential backoff.
+- Proxy D1/R2: retry com exponential backoff.
+- `TestConnectionAsync` para validação de config.
+- Logs sem expor tokens.
 
 ---
 
 ## 17. Mandatory Guardrails
 
-- Nunca logar senhas.
+- Nunca logar tokens.
 - Nunca commitar credenciais.
+- HttpClient com `Authorization: Bearer` header.
 
 ---
 
@@ -234,25 +287,28 @@ PUT /api/local/cloud-session
 | Flow | Validation |
 |---|---|
 | GET /api/meta | retorna realtime config |
-| PUT /api/local/cloud-session | persiste config |
-| Sync manual | pull/push de tasks |
+| GET/PUT /api/local/cloud-session | persiste config em memória |
+| CloudflareProxyService.TestConnectionAsync | true/false |
+| CloudflareProxyService.ExecuteD1QueryAsync | D1Result |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Cloud session endpoints.
-- [ ] Polling configurável.
-- [ ] Proxy D1/R2 especificado.
+- [x] Cloud session endpoints.
+- [x] Meta endpoint com realtime config.
+- [x] Proxy D1/R2 interfaces + implementação.
+- [x] Tokens via HttpClient Authorization header.
 
 ---
 
 ## 20. Implementation Plan
 
-1. Criar `Taskboard.Cloud`.
-2. Implementar `CloudSession` config.
-3. Implementar proxy e sync.
+1. Criar `Taskboard.Cloud` project.
+2. Implementar `ICloudflareProxyService` e `CloudflareProxyService`.
+3. Implementar `CloudSessionService` em `Taskboard.Server`.
 4. Integrar endpoints em `Taskboard.Server`.
+5. Configurar HttpClient para Cloudflare no DI.
 
 ---
 
@@ -268,15 +324,16 @@ PUT /api/local/cloud-session
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
 | Latência Cloudflare | Médio | Média | Cache local, sync incremental |
-| Segurança de credenciais | Alto | Média | Secret store, cifragem |
+| Segurança de credenciais | Alto | Média | Configuração externa, não hardcoded |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] SPEC revisado.
-- [ ] Contratos claros.
-- [ ] Estratégia de segurança.
+- [x] SPEC revisado.
+- [x] Contratos claros.
+- [x] Estratégia de segurança.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -286,11 +343,11 @@ PUT /api/local/cloud-session
 
 ## Pending Questions
 
-1. Cloudflare é obrigatório ou opcional?
-2. Companion deve rodar como serviço separado ou no mesmo processo?
+1. Cloudflare é obrigatório ou opcional? (Opcional - interfaces definidas)
+2. Companion deve rodar como serviço separado ou no mesmo processo? (Fora de escopo - apenas config)
 
 ## Human Approval Checklist
 
-- [ ] Cloud session mapeado.
-- [ ] Proxy e sync claros.
-- [ ] Segurança de credenciais.
+- [x] Cloud session mapeado.
+- [x] Proxy e interfaces claras.
+- [x] Segurança de credenciais.

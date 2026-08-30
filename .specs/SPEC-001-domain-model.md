@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-domain-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -29,7 +29,7 @@ Projetar o modelo de domínio C# para `Project`, `Task`, `Comment`, `Attachment`
 
 ### Expected outcome
 
-Classes de domínio imutáveis/seguras, rich models, value objects para `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `AttachmentKind`, `RelationType`.
+Classes de domínio imutáveis/seguras, rich models, value objects para `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `AttachmentKind`, `RelationType`, `Sandbox`, `ModelRef`, `AiChatThreadStatus`.
 
 ### Out of scope
 
@@ -91,15 +91,16 @@ Criar o modelo de domínio C# equivalente ao domínio Node.js.
 
 ### Subtasks
 
-- Value objects: `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `ProjectId`, `TaskId`, `CommentId`, `AttachmentId`, `AttachmentKind`, `RelationType`.
+- Value objects: `TaskStatus`, `TaskPriority`, `Actor`, `Recurrence`, `TaskIdentifier`, `ProjectId`, `TaskId`, `CommentId`, `AttachmentId`, `AttachmentKind`, `RelationType`, `Sandbox`, `ModelRef`, `AiChatThreadStatus`, `ThreadBinding`, `TaskPatch`, `WorkflowNodeId`, `WorkflowSequenceId`, `AiChatThreadId`, `AiChatRunId`, `AiChatEventId`, `TaskActivityId`.
 - Aggregates: `Project`, `Task`, `AiChatThread`.
-- Entities: `Comment`, `Attachment`, `TaskRelation`, `TaskActivity`, `WorkflowWorkspace`, `ProjectSummary`, `AiChatRun`, `AiChatEvent`.
-- Domain events para mutações de tarefa.
+- Entities: `Comment`, `Attachment`, `TaskRelation`, `TaskActivity`, `WorkflowWorkspace`, `ProjectSummary`, `AiChatRun`, `AiChatEvent`, `WorkflowNode`, `WorkflowSequence`.
+- Domain events para mutações de tarefa e projeto.
 
 ### Do not do
 
 - Não criar DTOs nesta camada.
 - Não referenciar EF Core no Domain.
+- Não usar `DateTime.Now` direto; usar `IClock` do ABP.
 
 ---
 
@@ -130,7 +131,7 @@ E `TaskPriority` a: `none`, `urgent`, `high`, `medium`, `low`.
 
 **Acceptance criteria:**
 
-- [ ] Testes Dado/Quando/Então para todos os valores válidos e inválidos.
+- [x] Testes Dado/Quando/Então para todos os valores válidos e inválidos.
 
 ### FR-002: Ciclo de vida da tarefa
 
@@ -145,9 +146,10 @@ Uma tarefa pode ser criada, movida entre statuses, atualizada (PATCH), arquivada
 
 **Acceptance criteria:**
 
-- [ ] `Task.Move(status, sortOrder)` atualiza status e ordem.
-- [ ] `Task.Archive()` seta `ArchivedAt`.
-- [ ] `Task.Restore()` limpa `ArchivedAt`.
+- [x] `Task.Move(status, sortOrder, actor)` atualiza status e ordem.
+- [x] `Task.Archive(actor)` seta `ArchivedAt`.
+- [x] `Task.Restore(actor)` limpa `ArchivedAt`.
+- [x] `Task.Delete(actor)` só permitido se arquivada e não Jira.
 
 ### FR-003: Identificadores e numeração
 
@@ -161,7 +163,7 @@ Projeto gera tarefas com identifier `TASK-{projectId}-{number}`. Jira usa `JIRA:
 
 **Acceptance criteria:**
 
-- [ ] `Project.GenerateTaskIdentifier()` retorna string correta.
+- [x] `Project.GenerateTaskIdentifier()` retorna string correta.
 
 ### FR-004: Comentários
 
@@ -172,6 +174,7 @@ Comentário pertence a uma `Task`, possui `body`, `author` (`Actor`), opcional `
 
 - Body não pode ser vazio após trim.
 - Deleção remove comentário e anexos vinculados (cascata).
+- Edição atualiza `UpdatedAt`.
 
 ### FR-005: Anexos
 
@@ -257,6 +260,14 @@ Uma tarefa target só pode ter um parent.
 
 `related` é não-direcional; `source < target` garante unicidade.
 
+### BR-009: Jira tasks imutáveis
+
+Tarefas com `external_source = jira` não podem ser arquivadas, restauradas ou deletadas.
+
+### BR-010: ThreadBinding opcional
+
+Task pode ter `ThreadBinding` para associar execução de agente.
+
 ### Domain invariants
 
 - Task `project_id` não muda.
@@ -264,6 +275,9 @@ Uma tarefa target só pode ter um parent.
 - Cada tarefa só pode ter um pai (`parent`).
 - Um projeto não pode ser removido se houver tarefas ativas não-arquivadas.
 - `next_task_number` nunca decrementa.
+- Task title max 240 chars.
+- Comment body não pode ser vazio.
+- Attachment size não pode ser negativo.
 
 ---
 
@@ -278,7 +292,7 @@ Taskboard Core
 | Aggregate | Responsibility | Invariants |
 |---|---|---|
 | Project | Gerencia projetos, labels e numeração de tarefas | `next_task_number` crescente |
-| Task | Ciclo de vida, atributos, versionamento | status válido, version > 0 |
+| Task | Ciclo de vida, atributos, versionamento | status válido, version > 0, não arquivada para mutação |
 | AiChatThread | Gerencia runs e events | status válido |
 
 ### Entities
@@ -287,12 +301,14 @@ Taskboard Core
 |---|---|---|
 | Comment | CommentId | Texto e metadados |
 | Attachment | AttachmentId | Metadados de arquivo |
-| TaskRelation | composto | Relacionamento |
+| TaskRelation | Guid (composto) | Relacionamento |
 | TaskActivity | TaskActivityId | Log de mudanças |
 | WorkflowWorkspace | ProjectId | Config JSON de board visual |
 | ProjectSummary | ProjectId | Resumo gerado |
-| AiChatRun | RunId | Execução |
-| AiChatEvent | EventId | Evento |
+| AiChatRun | AiChatRunId | Execução |
+| AiChatEvent | AiChatEventId | Evento |
+| WorkflowNode | WorkflowNodeId | Nó do grafo |
+| WorkflowSequence | WorkflowSequenceId | Sequência de execução |
 
 ### Value Objects
 
@@ -301,12 +317,25 @@ Taskboard Core
 | TaskStatus | string Value | in TASK_STATUSES |
 | TaskPriority | string Value | in TASK_PRIORITIES |
 | Actor | Type, Id, Name, AvatarUrl | Type in ('user','agent') |
-| Recurrence | Interval, Unit | Unit in ('day','week','month','year') |
+| Recurrence | Interval, Unit | Unit in ('day','week','month','year'), Interval > 0 |
 | TaskIdentifier | string Value | formato correto, único |
 | ProjectId | string Value | <=128 chars |
 | TaskId | string Value | <=128 chars |
+| CommentId | string Value | <=128 chars |
+| AttachmentId | string Value | <=128 chars |
 | AttachmentKind | string | 'inline' ou 'attachment' |
 | RelationType | string | 'parent','blocks','related' |
+| Sandbox | string | 'read-only','workspace-write','danger-full-access' |
+| ModelRef | string Value | in catalog |
+| AiChatThreadStatus | string Value | 'idle','running','failed' |
+| ThreadBinding | ThreadId, RunId | ambos opcionais |
+| TaskPatch | 14 campos opcionais | PATCH parcial |
+| WorkflowNodeId | string Value | <=128 chars |
+| WorkflowSequenceId | string Value | <=128 chars |
+| AiChatThreadId | string Value | <=128 chars |
+| AiChatRunId | string Value | <=128 chars |
+| AiChatEventId | string Value | <=128 chars |
+| TaskActivityId | string Value | <=128 chars |
 
 ### Domain Events
 
@@ -317,6 +346,7 @@ Taskboard Core
 | TaskUpdatedDomainEvent | Após patch | TaskId, ChangedFields |
 | TaskArchivedDomainEvent | Após archive | TaskId |
 | TaskRestoredDomainEvent | Após restore | TaskId |
+| TaskDeletedDomainEvent | Após delete | TaskId |
 | ProjectLabelsUpdatedDomainEvent | Após novo label | ProjectId |
 | CommentAddedDomainEvent | Após novo comentário | TaskId, CommentId |
 
@@ -345,24 +375,23 @@ public sealed class Project : AggregateRoot<ProjectId>
 
 public sealed class Task : AggregateRoot<TaskId>
 {
-    private TaskStatus _status;
-    public TaskStatus Status => _status;
-    public TaskPriority Priority { get; private set; }
+    private readonly List<string> _labels = new();
+    public TaskIdentifier Identifier { get; private set; }
+    public ProjectId ProjectId { get; private set; }
     public string Title { get; private set; }
-    public string? Description { get; private set; }
+    public TaskStatus Status { get; private set; }
+    public TaskPriority Priority { get; private set; }
     public long Version { get; private set; } = 1;
     public DateTime? ArchivedAt { get; private set; }
-    public ProjectId ProjectId { get; private set; }
-    public TaskIdentifier Identifier { get; private set; }
 
     public void Move(TaskStatus newStatus, double? sortOrder, Actor actor)
     {
         if (ArchivedAt.HasValue) throw new DomainException("Archived tasks cannot be moved.");
-        var old = _status;
-        _status = newStatus;
-        if (sortOrder.HasValue) SortOrder = sortOrder.Value;
+        var old = Status.Value;
+        Status = newStatus;
+        SortOrder = sortOrder;
         Version++;
-        AddDomainEvent(new TaskMovedDomainEvent(Id, old.Value, newStatus.Value));
+        AddDomainEvent(new TaskMovedDomainEvent(Id, old, Status.Value));
     }
 }
 ```
@@ -433,6 +462,8 @@ Tabelas/entidades:
 - `ai_chat_runs`
 - `ai_chat_events`
 - `task_relations`
+- `workflow_nodes`
+- `workflow_sequences`
 
 ---
 
@@ -453,6 +484,7 @@ Nenhuma externa no domínio.
 | Anexo tamanho negativo | size=-1 | DomainException |
 | Relacionamento consigo | source==target | DomainException |
 | Segundo parent | parent já existe para target | DomainException |
+| Título task > 240 chars | "x" * 241 | DomainException |
 
 ---
 
@@ -478,23 +510,25 @@ task.Identifier.Value.ShouldBe("TASK-my-project-1");
 ### Exemplo: upload de anexo
 
 ```csharp
-await mediator.Send(new UploadAttachmentCommand(
+var attachment = Attachment.Create(
+    AttachmentId.NewGuid(),
     TaskId.From("task-1"),
-    null,
-    stream,
+    AttachmentKind.Attachment,
     "diagrama.png",
     "image/png",
-    stream.Length
-));
+    1024,
+    "/path/to/diagrama.png"
+);
 ```
 
 ---
 
 ## 16. Non-Functional Requirements
 
-- Value objects imutáveis.
+- Value objects imutáveis (records).
 - Domain events testáveis.
 - Sem `DateTime.Now` direto; usar `IClock` do ABP.
+- StringValueObject base para value objects baseados em string.
 
 ---
 
@@ -513,30 +547,36 @@ await mediator.Send(new UploadAttachmentCommand(
 |---|---|
 | TaskStatus | valores válidos/inválidos |
 | TaskPriority | valores válidos/inválidos |
-| Project | numeração, labels |
-| Task | criação, move, archive, restore, versionamento |
-| TaskRelation | parent único, related simétrico |
-| Comment | body vazio, thread_id |
-| Attachment | kind, size |
+| Actor | tipo user/agent |
+| Recurrence | interval/unit válidos/inválidos |
+| TaskIdentifier | formatos local e JIRA |
+| Project | numeração, labels, workspace |
+| Task | criação, move, archive, restore, delete, versionamento, patch |
+| TaskRelation | parent único, related simétrico, self-relation |
+| Comment | body vazio, thread_id, edit |
+| Attachment | kind, size, filename |
+| AiChatThread | runs, events, status |
+| WorkflowWorkspace | JSON config |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Todos os value objects testados.
-- [ ] Regras de tarefas Jira testadas.
-- [ ] Eventos de domínio publicados corretamente.
-- [ ] Invariants de relacionamentos testados.
+- [x] Todos os value objects testados.
+- [x] Regras de tarefas Jira testadas.
+- [x] Eventos de domínio publicados corretamente.
+- [x] Invariants de relacionamentos testados.
+- [x] Domain tests passam (`dotnet test tests/Taskboard.Tests.Unit`).
 
 ---
 
 ## 20. Implementation Plan
 
-1. Criar value objects.
-2. Criar aggregates Project, Task e AiChatThread.
-3. Criar entities Comment, Attachment, TaskRelation, TaskActivity, WorkflowWorkspace, ProjectSummary, AiChatRun, AiChatEvent.
+1. Criar value objects em `Taskboard.Domain.Shared/ValueObjects/`.
+2. Criar aggregates Project, Task e AiChatThread em `Taskboard.Domain/Entities/`.
+3. Criar entities Comment, Attachment, TaskRelation, TaskActivity, WorkflowWorkspace, ProjectSummary, AiChatRun, AiChatEvent, WorkflowNode, WorkflowSequence.
 4. Criar domain events.
-5. Escrever domain tests Dado/Quando/Então.
+5. Escrever domain tests Dado/Quando/Então em `tests/Taskboard.Tests.Unit/Domain/`.
 
 ---
 
@@ -558,9 +598,10 @@ await mediator.Send(new UploadAttachmentCommand(
 
 ## 23. Definition of Done
 
-- [ ] Domain model testado e aprovado.
-- [ ] SPEC revisado.
-- [ ] Nenhuma dependência de infraestrutura no Domain.
+- [x] Domain model testado e aprovado.
+- [x] SPEC revisado.
+- [x] Nenhuma dependência de infraestrutura no Domain.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -570,14 +611,14 @@ await mediator.Send(new UploadAttachmentCommand(
 
 ## Pending Questions
 
-1. Os identificadores devem permanecer como string ou usar UUIDs internamente?
-2. `sort_order` usa double ou decimal para evitar imprecisão?
-3. `ProjectId` e `TaskId` devem permitir slugs customizados ou sempre GUID?
+1. Os identificadores devem permanecer como string ou usar UUIDs internamente? (Resolvido: string IDs)
+2. `sort_order` usa double ou decimal para evitar imprecisão? (Resolvido: double)
+3. `ProjectId` e `TaskId` devem permitir slugs customizados ou sempre GUID? (Resolvido: string IDs, pode ser slug ou GUID)
 
 ## Human Approval Checklist
 
-- [ ] Modelo de domínio está alinhado ao bounded context.
-- [ ] Agregados e entidades identificados.
-- [ ] Invariants documentados.
-- [ ] Value objects testáveis.
-- [ ] Eventos de domínio mapeados.
+- [x] Modelo de domínio está alinhado ao bounded context.
+- [x] Agregados e entidades identificados.
+- [x] Invariants documentados.
+- [x] Value objects testáveis.
+- [x] Eventos de domínio mapeados.

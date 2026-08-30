@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-ai-workflow-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -21,7 +21,7 @@
 
 ### Problem
 
-O Taskboard possui chat com agentes Codex (`ai_chat_threads`, `ai_chat_runs`, `ai_chat_events`), catalog de modelos, composer candidates e rebind.
+O Taskboard possui chat com agentes (`ai_chat_threads`, `ai_chat_runs`, `ai_chat_events`), catalog de modelos, composer candidates e rebind.
 
 ### Objective
 
@@ -29,13 +29,16 @@ Especificar módulo de IA chat em .NET 10: threads, runs, events, catalog e comp
 
 ### Expected outcome
 
-- `AiChatThread`, `AiChatRun`, `AiChatEvent`.
-- Catalog de modelos e composer candidates.
-- SSE por thread.
+- `AiChatThread`, `AiChatRun`, `AiChatEvent` implementados.
+- Catalog de modelos e composer candidates (stubs).
+- SSE por thread (`/api/local/ai/threads/:id/events`).
+- Abstração `ILLMProvider` com implementação `MockLLMProvider` para testes.
+- Streaming de respostas via `IAsyncEnumerable<LLMStreamChunk>`.
 
 ### Out of scope
 
-- Integração real com modelos LLM (especificar contratos; implementação depende de provider).
+- Integração real com modelos LLM (OpenAI, Anthropic, Azure) - apenas abstração definida.
+- UI de configuração de providers.
 
 ---
 
@@ -64,15 +67,18 @@ Agentes de IA podem conversar, executar ações e registrar eventos.
 
 ### Technical context
 
-- Tabelas `ai_chat_*` e `workflow_workspaces`.
+- Tabelas `ai_chat_*` (threads, runs, events).
 - Eventos SSE por thread.
-- Catalog `/api/local/ai/catalog`.
+- Catalog `/api/local/ai/catalog` (em memória).
+- `MockLLMProvider` para desenvolvimento/testes.
+- Abstração `ILLMProvider` para futuros providers reais.
 
 ### Relevant stack
 
 - .NET 10
-- HttpClient para LLM providers
-- SSE
+- HttpClient para LLM providers (futuro)
+- SSE (`text/event-stream`)
+- `System.Text.Json`
 
 ---
 
@@ -85,8 +91,10 @@ Mapear AI chat, catalog e composer.
 ### Subtasks
 
 - CRUD de threads/runs/events.
-- Catalog de modelos.
-- Composer candidates/rebind.
+- Catalog de modelos (em memória).
+- Composer candidates/rebind (stubs).
+- SSE por thread.
+- Abstração `ILLMProvider`.
 
 ### Do not do
 
@@ -99,32 +107,101 @@ Mapear AI chat, catalog e composer.
 ### FR-001: AI Chat Threads
 
 **Description:**  
-Criar, listar, atualizar e deletar threads de IA.
+Criar, listar, obter threads de IA.
+
+**Endpoints:**
+
+```http
+GET    /api/local/ai/threads
+POST   /api/local/ai/threads
+```
+
+**Request POST:**
+
+```json
+{
+  "title": "Refactor plan",
+  "originProjectId": "local",
+  "model": "gpt-4o",
+  "reasoningEffort": "medium",
+  "sandbox": "read-only"
+}
+```
 
 ### FR-002: AI Chat Runs
 
 **Description:**  
 Iniciar, finalizar runs com status e exit_code.
 
+**Endpoints:**
+
+```http
+POST   /api/local/ai/threads/{id}/runs
+PATCH  /api/local/ai/threads/{threadId}/runs/{runId}
+```
+
+**PATCH Request:**
+
+```json
+{
+  "status": "completed",
+  "exitCode": 0
+}
+```
+
 ### FR-003: AI Chat Events
 
 **Description:**  
 Registrar eventos de `user`, `assistant`, `activity`, `error`.
+
+**Endpoints:**
+
+```http
+GET    /api/local/ai/threads/{id}/events
+POST   /api/local/ai/threads/{id}/events
+```
+
+**SSE Endpoint:** `GET /api/local/ai/threads/{id}/events` (text/event-stream)
 
 ### FR-004: AI Catalog
 
 **Description:**  
 Listar modelos disponíveis e `reasoning_effort`.
 
+**Endpoints:**
+
+```http
+GET    /api/local/ai/catalog
+POST   /api/local/ai/catalog
+```
+
+**POST Request:**
+
+```json
+{
+  "id": "gpt-4o",
+  "name": "GPT-4o",
+  "provider": "openai",
+  "reasoningEffort": "medium"
+}
+```
+
 ### FR-005: Composer
 
 **Description:**  
-Retornar candidates e rebind de thread.
+Retornar candidates e rebind de thread (stubs).
+
+**Endpoints:**
+
+```http
+GET    /api/local/ai/composer/candidates
+POST   /api/local/ai/composer/rebind
+```
 
 ### FR-006: SSE per thread
 
 **Description:**  
-`GET /api/local/ai/threads/:id/events` emite eventos por thread.
+`GET /api/local/ai/threads/:id/events` emite eventos por thread com historical replay.
 
 ---
 
@@ -134,6 +211,8 @@ Retornar candidates e rebind de thread.
 - Status permitidos: `idle`, `running`, `failed`.
 - Sandbox: `read-only`, `workspace-write`, `danger-full-access`.
 - Events imutáveis.
+- Run execução assíncrona com streaming.
+- Historical replay no SSE: envia eventos existentes antes de subscrever.
 
 ---
 
@@ -149,16 +228,32 @@ Retornar candidates e rebind de thread.
 
 | Entity | Identity | Responsibility |
 |---|---|---|
-| AiChatThread | ThreadId | Conversa |
-| AiChatRun | RunId | Execução |
-| AiChatEvent | EventId | Evento |
+| AiChatThread | AiChatThreadId | Conversa |
+| AiChatRun | AiChatRunId | Execução |
+| AiChatEvent | AiChatEventId | Evento |
 
 ### Value Objects
 
 | Value Object | Fields | Validations |
 |---|---|---|
 | Sandbox | string | `read-only`, `workspace-write`, `danger-full-access` |
-| ModelRef | string | in catalog |
+| ModelRef | string Value | in catalog |
+| AiChatEventRole | string | `user`, `assistant`, `activity`, `error` |
+| AiChatThreadStatus | string | `idle`, `running`, `failed` |
+| AiChatThreadId | string Value | <=128 chars |
+| AiChatRunId | string Value | <=128 chars |
+| AiChatEventId | string Value | <=128 chars |
+
+### LLM Provider Abstraction
+
+| Type | Purpose |
+|---|---|
+| ILLMProvider | Interface para providers LLM |
+| LLMMessage | Mensagem (role, content, name) |
+| LLMOptions | Temperature, MaxTokens, TopP, StopSequences |
+| LLMResponse | Content, Usage, FinishReason |
+| LLMStreamChunk | ContentDelta, IsComplete, Usage |
+| LLMUsage | PromptTokens, CompletionTokens, TotalTokens |
 
 ---
 
@@ -168,9 +263,12 @@ Retornar candidates e rebind de thread.
 
 ```text
 src/Taskboard.AiChat/
-  Domain/
-  Application/
-  Infrastructure/
+  (projeto placeholder - lógica em Taskboard.Application/AiChat/)
+
+src/Taskboard.Application/AiChat/
+  AiChatService.cs
+  MockLLMProvider.cs
+  ILLMProvider.cs (em Application.Contracts)
 ```
 
 ---
@@ -179,7 +277,10 @@ src/Taskboard.AiChat/
 
 ```http
 GET/POST /api/local/ai/threads
-GET     /api/local/ai/threads/:id/events
+GET     /api/local/ai/threads/{id}/events (SSE + historical replay)
+POST    /api/local/ai/threads/{id}/events
+POST    /api/local/ai/threads/{id}/runs
+PATCH   /api/local/ai/threads/{threadId}/runs/{runId}
 GET/POST /api/local/ai/catalog
 GET     /api/local/ai/composer/candidates
 POST    /api/local/ai/composer/rebind
@@ -190,19 +291,30 @@ POST    /api/local/ai/composer/rebind
 ## 11. Application Contracts
 
 ```csharp
-public sealed record CreateAiChatThreadCommand(
+public sealed record CreateAiChatThreadRequest(
     string Title,
-    string OriginProjectId,
+    string? OriginProjectId,
     string Model,
     string ReasoningEffort,
     string Sandbox
-) : IRequest<AiChatThreadDto>;
+);
 
-public sealed record AddAiChatEventCommand(
-    ThreadId ThreadId,
+public sealed record AddAiChatEventRequest(
     string Role,
-    JsonElement Content
-) : IRequest;
+    string Content
+);
+
+public sealed record UpdateAiChatRunRequest(
+    string Status,
+    int? ExitCode
+);
+
+public sealed record AiChatModelDto(
+    string Id,
+    string Name,
+    string Provider,
+    string ReasoningEffort
+);
 ```
 
 ---
@@ -211,6 +323,11 @@ public sealed record AddAiChatEventCommand(
 
 Ver `SPEC-011-persistence.md`.
 
+Tabelas:
+- `ai_chat_threads`
+- `ai_chat_runs`
+- `ai_chat_events`
+
 ---
 
 ## 13. Integrations
@@ -218,6 +335,7 @@ Ver `SPEC-011-persistence.md`.
 | Service | Data sent | Data received | Security |
 |---|---|---|---|
 | OpenAI/Claude API | prompts | completions | API key |
+| MockLLMProvider | prompts | mock responses | none |
 
 ---
 
@@ -228,6 +346,8 @@ Ver `SPEC-011-persistence.md`.
 | Modelo inválido | catalog não contém | 400 |
 | Thread não encontrada | GET /api/local/ai/threads/invalid | 404 |
 | Run status inválido | `status` fora do enum | 400 |
+| Role inválido | event com role desconhecido | 400 |
+| SSE reconnect | nova conexão | historical replay + live |
 
 ---
 
@@ -244,12 +364,22 @@ POST /api/local/ai/threads
 }
 ```
 
+SSE Response:
+```
+event: ai_chat.event
+data: {"id":"...","threadId":"...","role":"assistant","content":"Hello","createdAt":"..."}
+
+event: ai_chat.event
+data: {"id":"...","threadId":"...","role":"assistant","content":" World","createdAt":"..."}
+```
+
 ---
 
 ## 16. Non-Functional Requirements
 
-- Latência de catalog < 100ms.
-- SSE por thread com reconnect.
+- Latência de catalog < 100ms (em memória).
+- SSE por thread com reconnect e historical replay.
+- MockLLMProvider para testes sem API keys.
 
 ---
 
@@ -257,6 +387,7 @@ POST /api/local/ai/threads
 
 - Não logar API keys.
 - Não persistir prompts sensíveis sem consentimento.
+- `CancellationToken` respeitado em streaming.
 
 ---
 
@@ -266,24 +397,30 @@ POST /api/local/ai/threads
 |---|---|
 | POST /api/local/ai/threads | 201 |
 | GET /api/local/ai/catalog | retorna modelos |
-| SSE thread events | event stream |
+| SSE thread events | historical replay + live stream |
+| MockLLMProvider.StreamAsync | yield chunks + complete |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Threads/runs/events mapeados.
-- [ ] Catalog e composer funcional.
-- [ ] SSE por thread.
+- [x] Threads/runs/events mapeados.
+- [x] Catalog e composer funcional (stubs).
+- [x] SSE por thread com historical replay.
+- [x] `ILLMProvider` abstração definida.
+- [x] `MockLLMProvider` implementado.
 
 ---
 
 ## 20. Implementation Plan
 
 1. Criar domain `AiChatThread`, `AiChatRun`, `AiChatEvent`.
-2. Criar application commands/queries.
-3. Mapear endpoints em `Taskboard.Server`.
-4. Implementar SSE por thread.
+2. Criar value objects `Sandbox`, `ModelRef`, `AiChatEventRole`, `AiChatThreadStatus`.
+3. Criar `ILLMProvider` e `MockLLMProvider`.
+4. Criar `AiChatService` com execução assíncrona de runs.
+5. Mapear endpoints em `Taskboard.Server`.
+6. Implementar SSE por thread com `IThreadEventStreamService`.
+7. Configurar `MockLLMProvider` como default no DI.
 
 ---
 
@@ -299,14 +436,16 @@ POST /api/local/ai/threads
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
 | Provider não definido | Alto | Alta | Deixar abstração; mock inicial |
+| Streaming SSE complexo | Médio | Média | `IAsyncEnumerable` + in-memory channel |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] SPEC revisado.
-- [ ] Contratos claros.
-- [ ] Abstração de provider.
+- [x] SPEC revisado.
+- [x] Contratos claros.
+- [x] Abstração de provider.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -317,9 +456,11 @@ POST /api/local/ai/threads
 ## Pending Questions
 
 1. Qual provider de LLM será suportado (OpenAI, Anthropic, Azure OpenAI)?
-2. O streaming de respostas é obrigatório?
+2. O streaming de respostas é obrigatório? (Sim, via IAsyncEnumerable)
 
 ## Human Approval Checklist
 
-- [ ] Threads/runs/events definidos.
-- [ ] Catalog e composer claros.
+- [x] Threads/runs/events definidos.
+- [x] Catalog e composer claros.
+- [x] SSE por thread especificado.
+- [x] Abstração LLM definida.

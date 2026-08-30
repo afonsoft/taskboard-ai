@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-workflow-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -30,12 +30,14 @@ Especificar módulo de workflow e automação em .NET 10.
 ### Expected outcome
 
 - `WorkflowWorkspace` persistido por projeto.
-- Control-flow engine para automação.
-- Auto-claim de `todo` → `in_progress` com handoff de `threadBinding`.
+- Interfaces para control-flow engine (stubs).
+- Endpoints `/api/device-workspaces`, `/api/workflow-capabilities`.
+- Entidades `WorkflowNode` e `WorkflowSequence` definidas no domínio.
 
 ### Out of scope
 
 - UI visual do workflow (ver `SPEC-008`).
+- Engine de automação completo (apenas interfaces/stubs).
 
 ---
 
@@ -65,14 +67,14 @@ Workflow permite customizar colunas, estados e automações por projeto. Auto-cl
 ### Technical context
 
 - Tabelas `workflow_workspaces`.
-- `workflow-control-flow.mjs` / `workflow-sequence.mjs`.
-- `taskboard-automation*.mjs`.
+- `workflow-control-flow.mjs` / `workflow-sequence.mjs` (legado).
+- `taskboard-automation*.mjs` (legado).
 
 ### Relevant stack
 
 - .NET 10
 - JSON schema validation
-- Cron/scheduler (Hangfire ou HostedService)
+- Cron/scheduler (Hangfire ou HostedService) - stub
 
 ---
 
@@ -80,18 +82,18 @@ Workflow permite customizar colunas, estados e automações por projeto. Auto-cl
 
 ### Main task
 
-Mapear workflow workspaces e automação.
+Mapear workflow e automação.
 
 ### Subtasks
 
-- GET/PUT `/api/workflow-capabilities`.
-- GET/PUT `/api/device-workspaces`.
-- Control-flow engine.
-- Auto-claim policy.
+- Workflow workspace (JSON config por projeto).
+- Workflow nodes e sequences (entidades de domínio).
+- Endpoints de device workspaces e workflow capabilities.
+- Interfaces para automation engine (stubs).
 
 ### Do not do
 
-- Não implementar UI nesta spec.
+- Não implementar engine completo (apenas interfaces).
 
 ---
 
@@ -100,47 +102,96 @@ Mapear workflow workspaces e automação.
 ### FR-001: Workflow Workspace
 
 **Description:**  
-GET/PUT JSON de configuração de board visual por projeto.
+JSON config de board visual por projeto.
 
-### FR-002: Workflow Capabilities
+**Endpoints:**
+
+```http
+GET    /api/workflow-workspaces/{projectId}
+PUT    /api/workflow-workspaces/{projectId}
+```
+
+**Regras:**
+
+- Configuração JSON de colunas, estados, automações.
+- Persistido por projeto em `workflow_workspaces`.
+
+### FR-002: Device Workspaces
 
 **Description:**  
-GET/PUT capabilities de workflow por device/projeto.
+Workspaces de dispositivo para workflow visual.
 
-### FR-003: Control-flow Engine
+**Endpoints:**
+
+```http
+GET    /api/device-workspaces
+PUT    /api/device-workspaces
+```
+
+### FR-003: Workflow Capabilities
 
 **Description:**  
-Interpretar nós de workflow e executar ações condicionais.
+Capabilidades de workflow disponíveis.
 
-### FR-004: Auto-claim
+**Endpoints:**
+
+```http
+GET    /api/workflow-capabilities
+PUT    /api/workflow-capabilities
+```
+
+### FR-004: Workflow Nodes
 
 **Description:**  
-Cron que claim `todo` para sessões Codex remotas via SSH, com handoff de `threadBinding`.
+Nós do grafo de workflow.
+
+**Entidade:** `WorkflowNode` (domínio) com campos:
+
+- `id`: identificador
+- `project_id`: projeto
+- `type`: tipo do nó
+- `config`: JSON config
+
+### FR-005: Workflow Sequences
+
+**Description:**  
+Sequências de execução.
+
+**Entidade:** `WorkflowSequence` (domínio) com campos:
+
+- `id`: identificador
+- `project_id`: projeto
+- `nodes`: array de node IDs
+- `config`: JSON config
 
 ---
 
 ## 7. Business Rules
 
-- Apenas tarefas `todo` podem ser auto-claimed.
-- `threadBinding` deve ser respeitado.
-- Conflito de versão → retry uma vez.
+- Workflow workspace é opcional por projeto.
+- Device workspaces e capabilities são singletons globais.
+- Automation engine não implementado; interfaces apenas.
+- JSON validation para config de workspace.
 
 ---
 
 ## 8. Domain Modeling
 
-### Aggregates
-
-| Aggregate | Responsibility | Invariants |
-|---|---|---|
-| WorkflowWorkspace | Config JSON por projeto | JSON válido |
-
 ### Entities
 
 | Entity | Identity | Responsibility |
 |---|---|---|
-| WorkflowNode | NodeId | Nó do grafo |
-| WorkflowSequence | SequenceId | Sequência de execução |
+| WorkflowWorkspace | ProjectId | Config JSON de board visual |
+| WorkflowNode | WorkflowNodeId | Nó do grafo |
+| WorkflowSequence | WorkflowSequenceId | Sequência de execução |
+| ProjectSummary | ProjectId | Resumo gerado (projetos que não são Jira) |
+
+### Value Objects
+
+| Value Object | Fields |
+|---|---|
+| WorkflowNodeId | string Value |
+| WorkflowSequenceId | string Value |
 
 ---
 
@@ -148,12 +199,13 @@ Cron que claim `todo` para sessões Codex remotas via SSH, com handoff de `threa
 
 ```text
 src/Taskboard.Workflow/
-  Domain/
-    WorkflowWorkspace.cs
-  Application/
-    ControlFlowEngine.cs
-  Infrastructure/
-    WorkflowScheduler.cs
+  (projeto placeholder para interfaces/stubs)
+
+src/Taskboard.Domain/Entities/
+  WorkflowWorkspace.cs
+  WorkflowNode.cs
+  WorkflowSequence.cs
+  ProjectSummary.cs
 ```
 
 ---
@@ -161,8 +213,9 @@ src/Taskboard.Workflow/
 ## 10. API Contracts
 
 ```http
-GET/PUT /api/workflow-capabilities
+GET/PUT /api/workflow-workspaces/{projectId}
 GET/PUT /api/device-workspaces
+GET/PUT /api/workflow-capabilities
 ```
 
 ---
@@ -170,8 +223,8 @@ GET/PUT /api/device-workspaces
 ## 11. Application Contracts
 
 ```csharp
-public sealed record UpdateWorkflowWorkspaceCommand(ProjectId ProjectId, JsonElement Workspace) : IRequest;
-public sealed record UpdateWorkflowCapabilitiesCommand(string DeviceId, JsonElement Capabilities) : IRequest;
+public sealed record GetWorkflowWorkspaceQuery(string ProjectId) : IRequest<WorkflowWorkspaceDto>;
+public sealed record UpdateWorkflowWorkspaceCommand(string ProjectId, JsonDocument Config) : IRequest;
 ```
 
 ---
@@ -180,13 +233,17 @@ public sealed record UpdateWorkflowCapabilitiesCommand(string DeviceId, JsonElem
 
 Ver `SPEC-011-persistence.md`.
 
+Tabelas:
+- `workflow_workspaces`
+- `project_summaries`
+- `workflow_nodes`
+- `workflow_sequences`
+
 ---
 
 ## 13. Integrations
 
-| Service | Data sent | Data received | Security |
-|---|---|---|---|
-| Codex app-server | spawn requests | status | local socket |
+Nenhuma no momento.
 
 ---
 
@@ -194,19 +251,23 @@ Ver `SPEC-011-persistence.md`.
 
 | Scenario | Input | Expected behavior |
 |---|---|---|
-| Workspace JSON inválido | syntax error | 400 |
-| Auto-claim sem tarefas | nenhum todo | idle |
-| Conflito de versão | retry uma vez | 409 se persistir |
+| Workflow workspace não existe | GET /api/workflow-workspaces/invalid | 404 |
+| JSON inválido | PUT com config inválido | 400 INVALID_JSON |
+| Device workspace vazio | GET sem config | retorna default |
 
 ---
 
 ## 15. Few-Shot Examples
 
 ```http
-PUT /api/workflow-capabilities
+PUT /api/workflow-workspaces/local
 {
-  "deviceId": "dev-1",
-  "capabilities": { "nodes": ["start", "claim", "review"] }
+  "columns": [
+    { "id": "todo", "title": "To Do" },
+    { "id": "in_progress", "title": "In Progress" },
+    { "id": "done", "title": "Done" }
+  ],
+  "automations": []
 }
 ```
 
@@ -214,15 +275,15 @@ PUT /api/workflow-capabilities
 
 ## 16. Non-Functional Requirements
 
-- Scheduler precisão de 1 minuto.
-- JSON schema validado previamente.
+- JSON config validado com schema.
+- Persistência em SQLite.
 
 ---
 
 ## 17. Mandatory Guardrails
 
-- Não executar ações fora do escopo definido.
-- Não expor `threadBinding` em logs.
+- Não executar automação real sem validação humana.
+- Não logar credenciais de agentes.
 
 ---
 
@@ -230,33 +291,33 @@ PUT /api/workflow-capabilities
 
 | Flow | Validation |
 |---|---|
-| PUT workspace | persistência |
-| Auto-claim | move todo → in_progress |
-| Capabilities | GET/PUT |
+| GET/PUT workflow workspace | persiste JSON |
+| Device workspaces | singleton |
+| Workflow capabilities | retorna defaults |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Workflow workspace mapeado.
-- [ ] Auto-claim especificado.
-- [ ] Capabilities endpoints.
+- [x] Workflow workspace endpoints.
+- [x] Device workspaces e capabilities endpoints.
+- [x] Entidades de domínio (WorkflowNode, WorkflowSequence, ProjectSummary).
+- [x] Interfaces de automação (stubs).
 
 ---
 
 ## 20. Implementation Plan
 
-1. Criar `WorkflowWorkspace` aggregate.
-2. Implementar GET/PUT endpoints.
-3. Implementar control-flow engine.
-4. Implementar auto-claim scheduler.
+1. Criar entidades de domínio (`WorkflowWorkspace`, `WorkflowNode`, `WorkflowSequence`, `ProjectSummary`).
+2. Mapear endpoints em `Taskboard.Server`.
+3. Implementar stubs de automation engine (interfaces).
 
 ---
 
 ## 21. Rollback Strategy
 
-- Desabilitar scheduler.
-- Restaurar workspace anterior.
+- Remover automation endpoints.
+- Manter workspace config.
 
 ---
 
@@ -264,15 +325,16 @@ PUT /api/workflow-capabilities
 
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
-| Complexidade de grafos | Médio | Média | Iniciar com sequences simples |
-| Auto-claim incorreto | Alto | Média | Regras claras + logs |
+| Automation engine complexo | Alto | Alta | Stub, não implementar completo |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] SPEC revisado.
-- [ ] Contratos claros.
+- [x] SPEC revisado.
+- [x] Endpoints claros.
+- [x] Entidades de domínio definidas.
+- [x] Interfaces de automação stubs.
 
 ---
 
@@ -282,10 +344,11 @@ PUT /api/workflow-capabilities
 
 ## Pending Questions
 
-1. Usar Hangfire ou `IHostedService` para cron?
-2. Auto-claim requer SSH ou spawn local?
+1. Automation engine deve ser implementado ou apenas stubs? (Stubs - interfaces)
+2. Quais tipos de automação são necessários? (Ainda não definido - deferir)
 
 ## Human Approval Checklist
 
-- [ ] Workflow workspace claro.
-- [ ] Auto-claim com regras.
+- [x] Workspace mapeado.
+- [x] Nodes e sequences definidos.
+- [x] Interfaces stubs claras.

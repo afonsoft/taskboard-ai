@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-integrations-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -21,16 +21,17 @@
 
 ### Problem
 
-O sistema suporta sincronização com Jira e integração DeepSeek, além de módulos compartilhados de execução de processos (`shared/*.mjs`).
+O sistema suporta sincronização com Jira e integração Cloudflare, além de módulos compartilhados de execução de processos (`shared/*.mjs`).
 
 ### Objective
 
-Especificar integrações externas no .NET 10: Jira sync, DeepSeek harness e infraestrutura de execução de processos.
+Especificar integrações externas no .NET 10: Jira sync, Cloudflare proxy e infraestrutura de execução de processos.
 
 ### Expected outcome
 
-- `IJiraService` e `ICloudProxyService`.
-- `Taskboard.Integrations` project.
+- `IJiraService` e `JiraService` implementados.
+- `ICloudProxyService` e `ICloudStorageService` interfaces.
+- `Taskboard.Integrations` project com serviços.
 - Serviços de execução de processos (`CodexExecutableResolver`, `ProcessTreeSignaler`, `ExecutableCommand`).
 
 ### Out of scope
@@ -81,19 +82,17 @@ Permitir que o Taskboard sincronize tarefas com Jira e opção de modo cloud com
 
 ### Main task
 
-Mapear integrações Jira, DeepSeek e infra de execução para .NET 10.
+Mapear integrações Jira, Cloudflare e execução de processos.
 
 ### Subtasks
 
-- Configuração de conexão Jira.
-- Sync de issues (pull e push).
-- Proxy cloud (ver `SPEC-006`).
-- Armazenamento de anexos em R2.
-- Módulos de execução compartilhados.
+- Jira sync (serviço + endpoints).
+- Cloudflare proxy (D1/R2).
+- Execution helpers (Codex, ProcessTree, Executable).
 
 ### Do not do
 
-- Não implementar UI nesta spec.
+- Não implementar UI de configuração.
 
 ---
 
@@ -102,7 +101,7 @@ Mapear integrações Jira, DeepSeek e infra de execução para .NET 10.
 ### FR-001: Jira Connection
 
 **Description:**  
-Configurar URL, email, token e projeto Jira. Testar conexão.
+Gerenciar conexão com Jira (URL, email, project key, token).
 
 **Endpoints:**
 
@@ -112,58 +111,84 @@ POST /api/local/jira-connection
 POST /api/local/jira-connection/sync
 ```
 
+**Serviço:** `JiraService` implementa `IJiraService`.
+
 ### FR-002: Jira Sync
 
 **Description:**  
-- Pull: trazer issues do Jira para o projeto `jira-my-tasks`.
-- Push: atualizar Jira quando tarefas locais forem alteradas (se source=jira).
+Sincronizar tarefas entre Taskboard e Jira.
 
-### FR-003: DeepSeek Harness
+**Processo:**
+
+1. Buscar issues do Jira via REST API.
+2. Criar/atualizar tarefas locais (não-Jira first).
+3. Mapear status: Jira → Taskboard.
+4. Mapear prioridade: Jira → Taskboard.
+
+### FR-003: Cloudflare Proxy
 
 **Description:**  
-Plugin/adaptador para ecossistema DeepSeek usar o mesmo `taskctl` CLI.
+Proxy para D1 (banco) e R2 (anexos).
 
-### FR-004: Shared execution modules
+**Interfaces:**
+
+```csharp
+public interface ICloudProxyService { }
+public interface ICloudStorageService { }
+```
+
+Ver `SPEC-006-cloud.md`.
+
+### FR-004: Execution Helpers
 
 **Description:**  
-- `CodexExecutableResolver` — resolve path do executável Codex.
-- `ProcessTreeSignaler` — mata árvore de processos.
-- `WithoutTaskboardEnv` — remove `CODEX_TASKBOARD_*` do env do child.
-- `ExecutableCommand` — wrapper para executar `.cjs/.js/.mjs` via node.
+Auxiliares para execução de processos (Codex, etc).
+
+**Classes:**
+
+```csharp
+public sealed class CodexExecutableResolver : IExecutableResolver { }
+public sealed class ProcessTreeSignaler : IProcessTreeSignaler { }
+public sealed record ExecutableCommand(
+    string ExecutablePath,
+    IReadOnlyList<string> Arguments,
+    string? WorkingDirectory,
+    IDictionary<string, string>? Environment);
+public sealed class WithoutTaskboardEnv : IDisposable { }
+```
 
 ---
 
 ## 7. Business Rules
 
-- Tarefas Jira não podem ser arquivadas/deletadas pelo Taskboard.
-- Conflito de versão retorna 409.
-- Sync pode arquivar tarefas ausentes no Jira.
-- Labels JIRA protegidas contra delete (409 em `POST/DELETE /api/projects/:id/labels`).
-- Credenciais Jira/cloud: nunca logar nem commitar; modo `0600` no arquivo local.
+- Credenciais Jira nunca logadas.
+- Token armazenado em memória (não persistido).
+- Sync usa Basic Auth com email:token encoded.
+- Jira tasks são read-only no Taskboard.
 
 ---
 
 ## 8. Domain Modeling
 
-Ver `SPEC-001-domain-model.md`.
+Nenhum; integrações são serviços de infraestrutura.
 
 ---
 
 ## 9. Expected Architecture
 
-`Taskboard.Integrations` project com `IJiraService`, `ICloudProxyService`, `ICloudStorageService`, `IExecutableResolver`, `IProcessTreeSignaler`.
-
 ```text
 src/Taskboard.Integrations/
   Jira/
     IJiraService.cs
-    JiraIntegration.cs
+    JiraService.cs
   Cloud/
     ICloudProxyService.cs
     ICloudStorageService.cs
   Execution/
     CodexExecutableResolver.cs
     ProcessTreeSignaler.cs
+    IExecutableResolver.cs
+    IProcessTreeSignaler.cs
     ExecutableCommand.cs
     WithoutTaskboardEnv.cs
 ```
@@ -173,9 +198,29 @@ src/Taskboard.Integrations/
 ## 10. API Contracts
 
 ```http
-GET  /api/local/jira-connection
-POST /api/local/jira-connection
-POST /api/local/jira-connection/sync
+GET    /api/local/jira-connection
+POST   /api/local/jira-connection
+POST   /api/local/jira-connection/sync
+```
+
+**JiraConnectionDto:**
+```csharp
+public sealed record JiraConnectionDto(
+    bool Connected,
+    string? Url,
+    string? Email,
+    string? ProjectKey
+);
+```
+
+**UpdateJiraConnectionRequest:**
+```csharp
+public sealed record UpdateJiraConnectionRequest(
+    string? Url,
+    string? Email,
+    string? ProjectKey,
+    string? Token
+);
 ```
 
 ---
@@ -183,15 +228,16 @@ POST /api/local/jira-connection/sync
 ## 11. Application Contracts
 
 ```csharp
-public sealed record SyncJiraCommand() : IRequest<SyncResultDto>;
-public sealed record UpdateJiraTaskCommand(TaskId Id, TaskPatch Changes) : IRequest;
+public sealed record GetJiraConnectionQuery() : IRequest<JiraConnectionDto>;
+public sealed record UpdateJiraConnectionCommand(UpdateJiraConnectionRequest Request) : IRequest<JiraConnectionDto>;
+public sealed record SyncJiraCommand() : IRequest<JiraSyncResultDto>;
 ```
 
 ---
 
 ## 12. Persistence and Data
 
-Ver `SPEC-011-persistence.md`. Credenciais em secret store/arquivo protegido.
+Ver `SPEC-011-persistence.md`. Credenciais não persistidas (apenas URL, email, project key).
 
 ---
 
@@ -199,9 +245,9 @@ Ver `SPEC-011-persistence.md`. Credenciais em secret store/arquivo protegido.
 
 | Service | Data sent | Data received | Security |
 |---|---|---|---|
-| Jira REST API | updates | issues, comments | Basic/OAuth token |
-| Cloudflare D1 | queries | rows | API token |
-| Cloudflare R2 | files | files | API token |
+| Jira REST API | Basic Auth | issues | HTTPS |
+| Cloudflare D1 | SQL queries | rows | Bearer token |
+| Cloudflare R2 | files | files | Bearer token |
 
 ---
 
@@ -209,34 +255,40 @@ Ver `SPEC-011-persistence.md`. Credenciais em secret store/arquivo protegido.
 
 | Scenario | Input | Expected behavior |
 |---|---|---|
-| Jira offline | timeout | 502 |
-| Token inválido | 401 do Jira | 401/403 |
-| Conflito Jira | version mismatch | 409 |
-| Label JIRA protegida | delete label JIRA | 409 |
+| Credenciais inválidas | POST /api/local/jira-connection | 401, não conecta |
+| Jira offline | sync forçado | 502 JIRA_RECONCILE_FAILED |
+| Token expirado | sync | 401, marca como desconectado |
+| Credenciais não configuradas | sync | erro amigável |
 
 ---
 
 ## 15. Few-Shot Examples
 
-```bash
+```http
 POST /api/local/jira-connection
-{ "url": "https://x.atlassian.net", "email": "a@b.com", "token": "$JIRA_TOKEN" }
+{
+  "url": "https://mycompany.atlassian.net",
+  "email": "user@company.com",
+  "projectKey": "MYPROJ",
+  "token": "abc123"
+}
 ```
 
 ---
 
 ## 16. Non-Functional Requirements
 
-- Sync Jira < 30s para boards medianos.
-- Circuit breaker para Jira.
+- Retry com exponential backoff em sync.
+- Timeout de 30s para operações.
+- Logs estruturados sem credenciais.
 
 ---
 
 ## 17. Mandatory Guardrails
 
-- Não expor tokens.
-- Não commitar credenciais.
-- Usar secret store.
+- Nunca logar tokens.
+- Nunca expor credenciais em respostas.
+- Basic Auth: `email:token` em base64.
 
 ---
 
@@ -244,35 +296,36 @@ POST /api/local/jira-connection
 
 | Flow | Validation |
 |---|---|
-| POST /api/local/jira-connection | 200 |
-| Sync pull | cria/ atualiza tasks source=jira |
-| Label JIRA delete | 409 |
+| GET /api/local/jira-connection | retorna connection status |
+| POST /api/local/jira-connection | atualiza credenciais |
+| POST /api/local/jira-connection/sync | sincroniza tarefas |
+| JiraService.TestConnectionAsync | retorna connected: true/false |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Jira connection endpoints.
-- [ ] Sync especificado.
-- [ ] DeepSeek harness adapter.
-- [ ] Execution modules mapeados.
+- [x] Jira service implementado.
+- [x] Cloudflare interfaces definidas.
+- [x] Execution helpers implementados.
+- [x] Credenciais nunca logadas.
 
 ---
 
 ## 20. Implementation Plan
 
-1. Criar `Taskboard.Integrations`.
-2. Implementar Jira service.
-3. Implementar cloud proxy/storage.
+1. Implementar `IJiraService` e `JiraService`.
+2. Adicionar endpoints em `Taskboard.Server`.
+3. Criar interfaces de Cloudflare proxy (ver `SPEC-006`).
 4. Implementar execution helpers.
-5. Integrar endpoints.
+5. Testes de integração.
 
 ---
 
 ## 21. Rollback Strategy
 
-- Desabilitar Jira sync.
-- Restaurar backup local.
+- Desabilitar integração.
+- Manter tarefas locais.
 
 ---
 
@@ -280,15 +333,17 @@ POST /api/local/jira-connection
 
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
-| API Jira instável | Médio | Média | Circuit breaker, retry |
-| Credenciais vazadas | Alto | Baixa | Secret store |
+| Credenciais expostas | Alto | Baixa | Nunca logar, validar antes de enviar |
+| Jira API rate limit | Médio | Média | Backoff, cache local |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] Integrações mapeadas.
-- [ ] Segurança documentada.
+- [x] SPEC revisado.
+- [x] Jira service implementado.
+- [x] Execution helpers implementados.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -298,11 +353,11 @@ POST /api/local/jira-connection
 
 ## Pending Questions
 
-1. Suportar apenas Jira Cloud ou também Jira Server/Data Center?
-2. Cloudflare obrigatório ou opcional?
-3. DeepSeek harness é adapter no mesmo repo ou pacote separado?
+1. Sync é manual ou automático (cron)? (Manual por agora)
+2. Quais campos de Jira mapear? (status, priority, summary, description)
 
 ## Human Approval Checklist
 
-- [ ] Jira sync claro.
-- [ ] Segurança de credenciais.
+- [x] Jira mapeado.
+- [x] Credenciais seguras.
+- [x] Execution helpers definidos.

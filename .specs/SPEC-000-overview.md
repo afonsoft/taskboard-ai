@@ -12,7 +12,7 @@
 | Suggested branch | `devin/specs-harness-docs` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -25,7 +25,7 @@ O repositório `afonsoft/taskboard-ai` é uma aplicação local-first de gestão
 
 ### Objective
 
-Criar uma aplicação C# .NET 10 (ASP.NET Core minimal APIs + ABP N-Layer) que replique a funcionalidade atual: projetos, tarefas, comentários, anexos, relacionamentos, workspaces de workflow, chat de IA, sincronização Jira, CLI e servidor MCP.
+Criar uma aplicação C# .NET 10 (ASP.NET Core Minimal APIs + ABP N-Layer) que replique a funcionalidade atual: projetos, tarefas, comentários, anexos, relacionamentos, workspaces de workflow, chat de IA, sincronização Jira, CLI e servidor MCP.
 
 ### Expected outcome
 
@@ -33,14 +33,15 @@ Após a migração, a aplicação .NET 10 deve:
 
 - Atender às mesmas rotas HTTP documentadas nos specs.
 - Persistir os mesmos dados em SQLite/EF Core.
-- Oferecer CLI equivalente ao `taskctl`.
+- Oferecer CLI equivalente ao `taskctl` (usando Spectre.Console.Cli).
 - Expor servidor MCP com as mesmas ferramentas.
 - Disponibilizar Skill para agentes no padrão Agent Skills.
-- Reimplementar a UI em Blazor/MAUI (fase futura) ou, nesta fase, servir a SPA React existente.
+- Implementar autenticação baseada em cookies com usuário admin.
+- Servir frontend Blazor (fase 2) e preparar .NET MAUI (fase futura).
 
 ### Out of scope
 
-- Reescrita da UI web em outra tecnologia pode ser escopo futuro; nesta fase a UI pode ser servida estaticamente.
+- Reescrita da UI web em outra tecnologia pode ser escopo futuro; nesta fase a UI Blazor está implementada e servida estaticamente.
 - Deploy Cloudflare Workers/D1/R2 detalhado em `SPEC-006` e `SPEC-010`.
 - Modificação do código-fonte Node.js original (não reescrever o projeto legado).
 - Implementação real de C# (concluída): os módulos em `src/` seguem estas specs e compilam.
@@ -99,7 +100,7 @@ O Taskboard é um quadro de tarefas local-first, compatível com múltiplos agen
 - Skill em `skills/manage-taskboard/SKILL.md`.
 - Cloud: Cloudflare/D1/R2 via `wrangler`.
 
-**Alvo (.NET 10):**
+**Alvo (.NET 10) - IMPLEMENTADO:**
 
 - C# 14.
 - ASP.NET Core Minimal APIs.
@@ -108,8 +109,9 @@ O Taskboard é um quadro de tarefas local-first, compatível com múltiplos agen
 - xUnit + Shouldly + NSubstitute.
 - SSE (`text/event-stream`) para eventos globais e por thread.
 - MCP server com `ModelContextProtocol` SDK .NET, transporte Stdio/SSE.
-- CLI `taskctl` como `System.CommandLine` console app.
-- Blazor / .NET MAUI para frontend (fase futura).
+- CLI `taskctl` como **Spectre.Console.Cli** console app.
+- Blazor Server / .NET MAUI Blazor Hybrid para frontend.
+- Autenticação baseada em cookies com usuário admin configurável.
 
 ### Relevant files or directories
 
@@ -122,6 +124,9 @@ O Taskboard é um quadro de tarefas local-first, compatível com múltiplos agen
 /.github/workflows/      # GitHub Actions
 /src/
   Taskboard.Domain/
+  Taskboard.Domain.Shared/
+  Taskboard.Application.Contracts/
+  Taskboard.Application/
   Taskboard.EntityFrameworkCore/
   Taskboard.Server/
   Taskboard.Cli/
@@ -130,6 +135,8 @@ O Taskboard é um quadro de tarefas local-first, compatível com múltiplos agen
   Taskboard.Cloud/
   Taskboard.Workflow/
   Taskboard.Integrations/
+  Taskboard.Blazor/
+  Taskboard.Maui/
 /tests/
   Taskboard.Tests.Unit/
   Taskboard.Tests.Integration/
@@ -158,11 +165,11 @@ Migrar a aplicação `taskboard-ai` do stack Node.js/React/SQLite para C# .NET 1
 - Mapear domínio e entidades (`SPEC-001`).
 - Mapear persistência e schema SQLite (`SPEC-011`).
 - Mapear API REST e server HTTP (`SPEC-002`).
-- Mapear CLI `taskctl` (`SPEC-003`).
+- Mapear CLI `taskctl` (`SPEC-003` - migrado para Spectre.Console.Cli).
 - Mapear MCP server (`SPEC-004`).
 - Mapear IA / chat / workflow workspaces (`SPEC-005`, `SPEC-007`).
 - Mapear cloud e Jira (`SPEC-006`, `SPEC-010`).
-- Mapear Web UI (`SPEC-008`).
+- Mapear Web UI (`SPEC-008` - Blazor/MAUI).
 - Mapear Skill de agente (`SPEC-009`).
 - Definir arquitetura, testes, CI/CD e plano de implantação (este SPEC).
 
@@ -196,6 +203,10 @@ O servidor MCP .NET deve expor as mesmas tools e schemas JSON (ver `SPEC-004`).
 
 A skill `manage-taskboard` deve funcionar com o novo `taskctl` .NET e MCP (ver `SPEC-009`).
 
+### FR-006: Autenticação e Autorização
+
+Sistema de autenticação baseada em cookies com usuário admin configurável via variáveis de ambiente.
+
 ---
 
 ## 7. Business Rules
@@ -212,10 +223,16 @@ Rotas, payloads e códigos de erro HTTP devem ser mantidos ou versionados.
 
 `TASK-{projectId}-{number}` e `JIRA:{origin}:{key}` permanecem válidos.
 
+### BR-004: Segurança
+
+Senhas e tokens nunca logados; credenciais armazenadas de forma segura.
+
 ### Domain invariants
 
 - O projeto `local` (`全局`) sempre existe após inicialização.
 - Identificadores de tarefas são únicos globalmente.
+- Apenas tarefas arquivadas podem ser deletadas.
+- Tarefas Jira não podem ser modificadas no Taskboard.
 
 ---
 
@@ -229,10 +246,6 @@ Resumo dos agregados:
 |---|---|
 | Project | Gerencia projetos, labels e numeração de tarefas |
 | Task | Ciclo de vida, status, prioridade, versionamento |
-| Comment | Texto anexado a uma Task |
-| Attachment | Metadados de arquivo anexado |
-| TaskRelation | Ligação entre duas Tasks |
-| WorkflowWorkspace | Configuração JSON de board visual por projeto |
 | AiChatThread | Conversa com agente (runs e events) |
 
 ---
@@ -247,19 +260,23 @@ ABP N-Layer / Clean Architecture / Modular Monolith.
 
 ```text
 Domain
-  Taskboard.Domain.Shared
-  Taskboard.Domain
+  Taskboard.Domain.Shared      # Value Objects, Domain Events, Exceptions, Interfaces
+  Taskboard.Domain             # Aggregates, Entities, Domain Services
 Application
-  Taskboard.Application.Contracts
-  Taskboard.Application
+  Taskboard.Application.Contracts  # DTOs, Requests, Repository Interfaces, Service Interfaces
+  Taskboard.Application            # Application Services, Handlers, Mapping
 Infrastructure
-  Taskboard.EntityFrameworkCore
-  Taskboard.Mcp
-  Taskboard.Cli
-  Taskboard.Integrations
+  Taskboard.EntityFrameworkCore    # DbContext, Configurations, Repositories, Migrations
+  Taskboard.Mcp                    # MCP Server
+  Taskboard.Cli                    # CLI taskctl
+  Taskboard.Integrations           # Jira, Cloudflare, Execution helpers
+  Taskboard.Cloud                  # Cloud services
+  Taskboard.AiChat                 # AI Chat services
+  Taskboard.Workflow               # Workflow engine
 Presentation/API
-  Taskboard.Server
-  Taskboard.Blazor (futuro)
+  Taskboard.Server                 # ASP.NET Core Minimal APIs, Static Files, Auth
+  Taskboard.Blazor                 # Blazor Server Components
+  Taskboard.Maui                   # .NET MAUI Blazor Hybrid (preparado)
 Tests
   Taskboard.Tests.Unit
   Taskboard.Tests.Integration
@@ -268,9 +285,10 @@ Tests
 ### Allowed dependencies
 
 - `Domain` não depende de nenhuma outra camada.
-- `Application.Contracts` define DTOs e interfaces.
-- `Application` depende de `Domain`.
-- `Infrastructure` implementa contratos do `Application`.
+- `Domain.Shared` não depende de nenhuma outra camada.
+- `Application.Contracts` depende de `Domain.Shared`.
+- `Application` depende de `Domain` e `Application.Contracts`.
+- `Infrastructure` implementa contratos do `Application` e `Application.Contracts`.
 - `Server` orquestra entrada/saída.
 
 ### Forbidden dependencies
@@ -287,31 +305,48 @@ Tests
 
 Ver `SPEC-002-rest-api.md`.
 
-Resumo das rotas:
+Resumo das rotas implementadas:
 
 ```http
 GET    /health
-GET/PUT /api/client-storage
+POST   /api/login
+POST   /api/logout
+GET    /api/meta
+GET    /api/client-storage
+PUT    /api/client-storage
 GET    /api/local/codex-thread-progress
 GET    /api/local/host-runtime
 GET/PUT /api/local/cloud-session
 GET/POST /api/local/jira-connection
 POST   /api/local/jira-connection/sync
-GET    /api/meta
 GET/POST /api/local/ai/catalog
 GET    /api/local/ai/composer/candidates
 POST   /api/local/ai/composer/rebind
 GET/POST /api/local/ai/threads
+GET    /api/local/ai/threads/:id/events
+POST   /api/local/ai/threads/:id/events
+POST   /api/local/ai/threads/:id/runs
+PATCH  /api/local/ai/threads/:threadId/runs/:runId
 GET/PUT /api/device-workspaces
 GET/PUT /api/workflow-capabilities
 GET/POST /api/projects
-GET/POST/PATCH/DELETE /api/tasks/:id
+GET    /api/projects/{id}
+GET/POST /api/tasks
+GET/PATCH/DELETE /api/tasks/:id
 POST   /api/tasks/:id/move
 POST   /api/tasks/:id/archive
 POST   /api/tasks/:id/restore
 GET/POST /api/tasks/:id/comments
-GET/POST /api/attachments
+PATCH/DELETE /api/tasks/:taskId/comments/:commentId
+GET    /api/tasks/:id/activities
+GET/POST /api/tasks/:id/relations
+DELETE /api/tasks/:id/relations/{type}/{targetTaskId}
+POST   /api/attachments
+GET    /api/attachments/:id/content
+GET    /api/attachments/:id/download
+DELETE /api/attachments/:id
 GET    /api/events (SSE)
+GET    /api/local/ai/threads/:id/events (SSE)
 ```
 
 ---
@@ -397,6 +432,7 @@ Ver `SPEC-006-cloud.md`, `SPEC-010-integrations.md`.
 | Conflito de versão | PATCH com version desatualizado | 409 VERSION_CONFLICT |
 | Jira offline | sync forçado | 502 JIRA_RECONCILE_FAILED |
 | Arquivo inexistente | GET /api/attachments/invalid | 404 ATTACHMENT_NOT_FOUND |
+| Não autenticado | Acesso a rota protegida | 302 redirect para /login |
 
 ---
 
@@ -455,6 +491,7 @@ dotnet build /warnaserror
 - Não logar tokens, senhas ou dados pessoais.
 - Validar autorização antes de acessar recursos.
 - Sanitizar descrições e comentários (DOMPurify equivalente).
+- Autenticação via cookies HttpOnly, SameSite=Strict.
 
 ### Observability
 
@@ -498,6 +535,7 @@ dotnet build /warnaserror
 | Project | criação, numeração, labels |
 | Task | mudança de status, versionamento, prioridade |
 | TaskRelation | parent, blocks, related |
+| Value Objects | TaskStatus, TaskPriority, Actor, Recurrence, TaskIdentifier |
 
 ### Integration tests
 
@@ -507,18 +545,23 @@ dotnet build /warnaserror
 | GET /api/projects | retorna lista |
 | POST /api/tasks | cria com identifier correto |
 | PATCH /api/tasks/:id | version conflict 409 |
+| GET /api/tasks/:id/comments | retorna comentários |
+| POST /api/tasks/:id/comments | cria comentário |
+| GET /api/events | SSE stream funciona |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [x] Todos os specs de migração foram criados.
+- [x] Todos os specs de migração foram criados/atualizados.
 - [x] Arquitetura .NET 10 ABP N-Layer foi definida.
 - [x] Contratos HTTP mapeados sem ambiguidade.
 - [x] Domínio e persistência mapeados.
 - [x] CLI, MCP e Skill mapeados.
 - [x] Plano de testes definido.
 - [x] Riscos e rollback documentados.
+- [x] Build compila sem warnings.
+- [x] Testes passam.
 
 ---
 
@@ -532,33 +575,35 @@ dotnet build /warnaserror
 
 ### Step 2: Technical design
 
-- [ ] Definir classes de domínio.
-- [ ] Definir commands/queries.
-- [ ] Definir contratos API.
-- [ ] Definir repositórios.
-- [ ] Definir migrations.
+- [x] Definir classes de domínio.
+- [x] Definir commands/queries.
+- [x] Definir contratos API.
+- [x] Definir repositórios.
+- [x] Definir migrations.
 
 ### Step 3: Implementation
 
-- [ ] Implementar domínio.
-- [ ] Implementar aplicação.
-- [ ] Implementar infraestrutura EF Core + SQLite.
-- [ ] Implementar HttpApi.
-- [ ] Implementar CLI.
-- [ ] Implementar MCP server.
-- [ ] Implementar Skill.
+- [x] Implementar domínio.
+- [x] Implementar aplicação.
+- [x] Implementar infraestrutura EF Core + SQLite.
+- [x] Implementar HttpApi (Minimal APIs).
+- [x] Implementar CLI (Spectre.Console.Cli).
+- [x] Implementar MCP server.
+- [x] Implementar Skill.
+- [x] Implementar Autenticação/Autorização.
+- [x] Implementar Blazor Server.
 
 ### Step 4: Tests
 
-- [ ] Domain tests.
+- [x] Domain tests.
 - [ ] Application tests.
-- [ ] Integration tests.
+- [x] Integration tests.
 - [ ] Contract tests.
 
 ### Step 5: Final validation
 
-- [ ] Build.
-- [ ] Tests.
+- [x] Build.
+- [x] Tests.
 - [ ] Review arquitetura.
 - [ ] Documentação.
 
@@ -622,10 +667,10 @@ dotnet build /warnaserror
 
 ## Pending Questions and Ambiguities
 
-1. Frontend: manter React/Vite servido estaticamente ou reimplementar em Blazor/MAUI?
+1. Frontend: Blazor Server implementado; .NET MAUI preparado. Confirmar se MAUI deve ser completado.
 2. Banco padrão em produção: SQLite, PostgreSQL ou SQL Server?
-3. Empacotamento desktop (MAUI/WinUI) nesta fase?
-4. Servidor MCP: transporte padrão STDIO, SSE ou ambos?
+3. Servidor MCP: transporte padrão STDIO, SSE ou ambos?
+4. Deploy automático via GitHub Actions - quando habilitar?
 
 ## Human Approval Checklist
 

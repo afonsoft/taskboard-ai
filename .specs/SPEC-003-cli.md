@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-cli-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -25,7 +25,7 @@ O CLI atual `cli/taskctl.mjs` oferece comandos para projetos, cloud, issues, com
 
 ### Objective
 
-Criar um CLI .NET global tool `taskctl` (usando `System.CommandLine`) que consuma a API REST do Taskboard e ofereça os mesmos subcomandos e saída JSON.
+Criar um CLI .NET global tool `taskctl` (usando **Spectre.Console.Cli**) que consuma a API REST do Taskboard e ofereça os mesmos subcomandos e saída JSON.
 
 ### Expected outcome
 
@@ -39,7 +39,7 @@ Criar um CLI .NET global tool `taskctl` (usando `System.CommandLine`) que consum
 
 ## 2. Agent Role
 
-> Senior .NET CLI engineer usando `System.CommandLine` e `HttpClient`.
+> Senior .NET CLI engineer usando **Spectre.Console.Cli** e `HttpClient`.
 
 ---
 
@@ -62,7 +62,7 @@ O CLI permite automação, scripts e integração com agentes de IA fora do nave
 
 ### Technical context
 
-- Node.js `cli/taskctl.mjs`.
+- Node.js `cli/taskctl.mjs` (legado).
 - Default API URL `http://127.0.0.1:47823`.
 - Saída JSON opcional (`--json`).
 - Schema version 2.
@@ -70,7 +70,7 @@ O CLI permite automação, scripts e integração com agentes de IA fora do nave
 ### Relevant stack
 
 - .NET 10
-- `System.CommandLine`
+- **Spectre.Console.Cli** (v0.49.1)
 - `HttpClient`
 - `Microsoft.Extensions.DependencyInjection`
 
@@ -109,37 +109,37 @@ Ler URL base de `TASKBOARD_URL` ou `--url`; armazenar config em `~/.config/taskc
 ```bash
 taskctl project list --json
 taskctl project create --id my-project --name "My Project" --workspace-path /path --json
-taskctl project map my-project --workspace-path /path
+taskctl project map <project> --workspace-path /path
 ```
 
 ### FR-003: Issues
 
 ```bash
 taskctl issue list --project local --status todo --json
-taskctl issue get TASK-local-1 --json
+taskctl issue get <identifier> --json
 taskctl issue create --project local --title "x" --status todo --priority high --json
-taskctl issue update TASK-local-1 --title "y" --json
-taskctl issue move TASK-local-1 --status done --json
-taskctl issue archive TASK-local-1 --json
-taskctl issue restore TASK-local-1 --json
-taskctl issue relation TASK-local-1 add parent TASK-local-2
-taskctl issue relation TASK-local-1 remove parent TASK-local-2
+taskctl issue update <identifier> --title "y" --json
+taskctl issue move <identifier> --status done --json
+taskctl issue archive <identifier> --json
+taskctl issue restore <identifier> --json
+taskctl issue relation <identifier> add parent <target>
+taskctl issue relation <identifier> remove parent <target>
 ```
 
 ### FR-004: Comentários
 
 ```bash
-taskctl comment list TASK-local-1 --json
-taskctl comment add TASK-local-1 "texto" --json
-taskctl comment update COMMENT-ID "novo" --json
-taskctl comment delete COMMENT-ID
+taskctl comment list <identifier> --json
+taskctl comment add <identifier> "texto" --json
+taskctl comment update <commentId> "novo" --json
+taskctl comment delete <commentId>
 ```
 
 ### FR-005: Anexos
 
 ```bash
-taskctl attachment upload TASK-local-1 /path/to/file.png --json
-taskctl attachment download ATTACHMENT-ID /output/path.png
+taskctl attachment upload <identifier> /path/to/file.png --json
+taskctl attachment download <attachmentId> /output/path.png
 ```
 
 ### FR-006: Contexto
@@ -156,6 +156,7 @@ taskctl context current --json
 - Saída `--json` é o padrão para integração com agentes.
 - Erros da API são propagados com código e mensagem.
 - Exit codes: 0 sucesso, 1 erro genérico, 2 validação, 3 servidor offline, 4 auth, 5 conflito.
+- **Convenção crítica**: Todos os `CommandArgument` usam placeholders com `<>` (obrigatório) ou `[]` (opcional). Nomes "cru" quebram o `StyleParser` do Spectre.
 
 ---
 
@@ -167,18 +168,18 @@ Nenhum; CLI é presentation.
 
 ## 9. Expected Architecture
 
-Console app `Taskboard.Cli` usando `System.CommandLine` e `HttpClientFactory`.
+Console app `Taskboard.Cli` usando **Spectre.Console.Cli** e `HttpClientFactory`.
 
 ```text
 src/Taskboard.Cli/
   Program.cs
   Commands/
-    ProjectCommand.cs
-    IssueCommand.cs
-    CommentCommand.cs
-    AttachmentCommand.cs
-    CloudCommand.cs
-    ContextCommand.cs
+    ProjectCommands.cs
+    IssueCommands.cs
+    CommentCommands.cs
+    AttachmentCommands.cs
+    CloudCommands.cs
+    ContextCommands.cs
   Services/
     TaskboardApiClient.cs
     CliConfigService.cs
@@ -201,7 +202,7 @@ Não aplica. CLI consome HTTP diretamente.
 
 ## 12. Persistence and Data
 
-Config local em JSON.
+Config local em JSON (`~/.config/taskctl/settings.json`).
 
 ---
 
@@ -219,6 +220,7 @@ Taskboard HTTP API.
 | Argumentos insuficientes | create sem --title | help |
 | Resposta não-JSON | --json com erro | stderr claro |
 | Version conflict | issue update com version stale | retorna 409 e mensagem |
+| CommandArgument sem <> | [CommandArgument(0, "project")] | crash StyleParser |
 
 ---
 
@@ -247,6 +249,7 @@ taskctl issue create --project local --title "Fix bug" --status todo --priority 
 - Não persistir credenciais em texto plano.
 - Não implementar lógica de domínio no CLI.
 - Usar `CancellationToken` para timeouts.
+- **CommandArgument placeholders SEMPRE com `<>` ou `[]`**.
 
 ---
 
@@ -264,17 +267,18 @@ taskctl issue create --project local --title "Fix bug" --status todo --priority 
 
 ## 19. Acceptance Criteria
 
-- [ ] Todos os subcomandos implementados.
-- [ ] Saída JSON funcional.
-- [ ] Exit codes respeitados.
-- [ ] Configuração via env/args.
+- [x] Todos os subcomandos implementados.
+- [x] Saída JSON funcional.
+- [x] Exit codes respeitados.
+- [x] Configuração via env/args.
+- [x] CommandArgument placeholders corretos (`<>`/`[]`).
 
 ---
 
 ## 20. Implementation Plan
 
 1. Criar `Taskboard.Cli` console app.
-2. Configurar `System.CommandLine` root com subcommands.
+2. Configurar **Spectre.Console.Cli** root com subcommands.
 3. Implementar `TaskboardApiClient` com `HttpClientFactory`.
 4. Implementar `CliConfigService`.
 5. Implementar commands por recurso.
@@ -293,16 +297,17 @@ taskctl issue create --project local --title "Fix bug" --status todo --priority 
 
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
-| `System.CommandLine` API instável | Médio | Baixa | Pin versão estável ou usar `CommandLineParser` |
+| `Spectre.Console.Cli` API instável | Médio | Baixa | Pin versão 0.49.1 |
 | Diferenças de saída JSON vs Node.js | Médio | Média | Validar com testes contract |
+| CommandArgument placeholder bug | Alto | Média | Convenção `<>`/`[]` documentada em `gotchas.md` |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] CLI funcional.
-- [ ] Tests passam.
-- [ ] Documentação atualizada.
+- [x] CLI funcional.
+- [x] Tests passam.
+- [x] Documentação atualizada (`cli-migration.md`, `gotchas.md`, `followups.md`).
 
 ---
 
@@ -312,12 +317,13 @@ taskctl issue create --project local --title "Fix bug" --status todo --priority 
 
 ## Pending Questions
 
-1. A config pode usar `appsettings.json` ou `~/.taskctl/config.json`?
-2. Empacotar como global tool NuGet?
-3. Usar `System.CommandLine` ou `CommandLineParser`?
+1. A config pode usar `appsettings.json` ou `~/.taskctl/config.json`? (Resolvido: `~/.config/taskctl/settings.json`)
+2. Empacotar como global tool NuGet? (Futuro)
+3. Usar `System.CommandLine` ou `CommandLineParser`? (Resolvido: **Spectre.Console.Cli**)
 
 ## Human Approval Checklist
 
-- [ ] Subcomandos listados.
-- [ ] Exit codes definidos.
-- [ ] Configuração clara.
+- [x] Subcomandos listados.
+- [x] Exit codes definidos.
+- [x] Configuração clara.
+- [x] Convenção CommandArgument documentada.

@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-mcp-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -21,7 +21,7 @@
 
 ### Problem
 
-O MCP server atual `mcp/index.mjs` expõe 13 tools via STDIO/SSE usando `@modelcontextprotocol/sdk`. Precisa de equivalente em .NET 10.
+O MCP server atual `mcp/index.mjs` expõe 13 tools via STDIO usando `@modelcontextprotocol/sdk`. Precisa de equivalente em .NET 10.
 
 ### Objective
 
@@ -29,11 +29,12 @@ Criar servidor MCP em C# expondo as mesmas tools, mapeando cada `CallTool` para 
 
 ### Expected outcome
 
-Aplicação `Taskboard.Mcp` compatível com protocolo MCP, transporte STDIO e/ou SSE.
+Aplicação `Taskboard.Mcp` compatível com protocolo MCP, transporte STDIO, usando SDK oficial `ModelContextProtocol`.
 
 ### Out of scope
 
 - Ferramentas de IA generativa (ver `SPEC-005`).
+- Transporte SSE (apenas STDIO implementado).
 
 ---
 
@@ -49,7 +50,7 @@ Aplicação `Taskboard.Mcp` compatível com protocolo MCP, transporte STDIO e/ou
 
 ### Restrictions
 
-- Não duplicar lógica de negócio (usar MediatR/commands).
+- Não duplicar lógica de negócio (usar HTTP API client).
 - `CallTool` deve chamar HTTP API diretamente, não spawnar CLI.
 
 ---
@@ -69,9 +70,9 @@ MCP permite que IDEs (Claude, Cursor, VS Code Copilot, Devin, etc.) interajam co
 ### Relevant stack
 
 - .NET 10
-- `ModelContextProtocol` SDK .NET (ou implementação manual STDIO/SSE)
+- `ModelContextProtocol` SDK .NET (v0.1.0-preview+)
 - `System.Text.Json`
-- `Taskboard.Application.Contracts`
+- `Taskboard.Requests` / `Taskboard.ValueObjects`
 
 ---
 
@@ -83,10 +84,10 @@ Implementar servidor MCP .NET com as tools existentes.
 
 ### Subtasks
 
-- Implementar transporte STDIO/SSE.
-- Mapear cada tool para command/query do `Application`.
-- Validar inputs com schemas JSON.
-- Retornar erros formatados.
+- Implementar transporte STDIO.
+- Mapear cada tool para HTTP API client.
+- Validar inputs com schemas JSON (atributos Description).
+- Retornar erros formatados como `CallToolResult` com `IsError = true`.
 
 ### Do not do
 
@@ -109,12 +110,12 @@ Implementar servidor MCP .NET com as tools existentes.
 
 ### FR-003: create_project
 
-**Input:** `{ "id", "name", "workspace_path" }`.  
+**Input:** `{ "name", "id?", "workspace_path?" }`.  
 **Output:** `{ project }`.
 
 ### FR-004: list_issues
 
-**Input:** `{ "project_id", "status", "limit" }`.  
+**Input:** `{ "project_id", "status?", "limit?" }`.  
 **Output:** `{ project, tasks }`.
 
 ### FR-005: get_issue
@@ -124,42 +125,53 @@ Implementar servidor MCP .NET com as tools existentes.
 
 ### FR-006: create_issue
 
-**Input:** `{ "project_id", "title", "description", "status", "priority", "labels", "due_date" }`.  
+**Input:** `{ "project_id", "title", "description?", "status?", "priority?", "labels?", "start_date?", "due_date?" }`.  
 **Output:** `{ task }`.
 
 ### FR-007: update_issue
 
-**Input:** `{ "issue_id", "version", "changes" }`.  
+**Input:** `{ "issue_id", "version?", "changes" (JsonElement) }`.  
 **Output:** `{ task }`.
 
 ### FR-008: move_issue
 
-**Input:** `{ "issue_id", "version", "status", "sort_order" }`.  
+**Input:** `{ "issue_id", "status", "sort_order?" }`.  
 **Output:** `{ task }`.
 
 ### FR-009: archive_issue
 
-**Input:** `{ "issue_id", "version" }`.  
+**Input:** `{ "issue_id" }`.  
 **Output:** `{ task }`.
 
-### FR-010: add_comment
+### FR-010: restore_issue
+
+**Input:** `{ "issue_id" }`.  
+**Output:** `{ task }`.
+
+### FR-011: add_comment
 
 **Input:** `{ "issue_id", "body" }`.  
 **Output:** `{ comment }`.
 
-### FR-011: upload_attachment
+### FR-012: upload_attachment
 
 **Input:** `{ "issue_id", "file_path" }` (caminho local lido pelo servidor).  
 **Output:** `{ attachment }`.
+
+### FR-013: cloud_status
+
+**Input:** `{}`.  
+**Output:** `{ connected, cloudUrl? }`.
 
 ---
 
 ## 7. Business Rules
 
-- O MCP apenas orquestra; lógica em Application/Domain.
+- O MCP apenas orquestra; lógica em HTTP API.
 - Schemas devem ser compatíveis com MCP 2024-11-05.
-- Erros retornam `content` com texto descritivo.
-- `CallTool` chama API HTTP interna, não spawna CLI.
+- Erros retornam `CallToolResult` com `IsError = true` e `Content` com texto descritivo.
+- `CallTool` chama HTTP API interna via `ITaskboardApiClient`, não spawna CLI.
+- Resolução de `issue_id` aceita tanto GUID quanto identifier `TASK-{project}-{number}`.
 
 ---
 
@@ -171,7 +183,7 @@ Ver `SPEC-001-domain-model.md`.
 
 ## 9. Expected Architecture
 
-`Taskboard.Mcp` console app. `McpServerBuilder` com `AddTool` por tool. Injeta `IMediator` ou `ITaskboardApiClient`.
+`Taskboard.Mcp` console app. `McpServerBuilder` com `WithToolsFromAssembly()`. Injeta `ITaskboardApiClient`.
 
 ```text
 src/Taskboard.Mcp/
@@ -180,6 +192,7 @@ src/Taskboard.Mcp/
     TaskboardTools.cs
   Services/
     TaskboardApiClient.cs
+    ITaskboardApiClient.cs
 ```
 
 ---
@@ -202,7 +215,7 @@ Tools schemas JSON compatíveis com MCP.
 
 ## 11. Application Contracts
 
-Reutiliza commands/queries de `Taskboard.Application`.
+Reutiliza requests de `Taskboard.Requests` (`CreateTaskRequest`, `UpdateTaskRequest`, `MoveTaskRequest`, `CreateCommentRequest`, `CreateProjectRequest`).
 
 ---
 
@@ -222,10 +235,11 @@ Taskboard HTTP API.
 
 | Scenario | Input | Expected behavior |
 |---|---|---|
-| Tool inexistente | name inválido | erro protocolo |
-| Parâmetro faltando | create sem title | erro de validação |
+| Tool inexistente | name inválido | erro protocolo MCP |
+| Parâmetro faltando | create sem title | erro de validação (`IsError=true`) |
 | Versão conflito | update com version antiga | retornar erro amigável |
-| Arquivo não existe | upload_attachment com path inválido | 404 |
+| Arquivo não existe | upload_attachment com path inválido | 404 via API → erro formatado |
+| Issue não encontrada | get_issue com id inválido | erro "Issue não encontrada" |
 
 ---
 
@@ -253,8 +267,8 @@ Taskboard HTTP API.
 ## 16. Non-Functional Requirements
 
 - Latência de tool call < 500ms.
-- Transporte STDIO padrão; SSE opcional.
-- Logs estruturados sem expor dados sensíveis.
+- Transporte STDIO padrão.
+- Logs estruturados sem expor dados sensíveis (LogLevel.Trace para stderr).
 
 ---
 
@@ -263,6 +277,7 @@ Taskboard HTTP API.
 - Não duplicar lógica de negócio.
 - Não expor tokens/secrets.
 - Usar `CancellationToken`.
+- Configurar `TASKBOARD_URL` via env var ou config.
 
 ---
 
@@ -274,15 +289,16 @@ Taskboard HTTP API.
 | create_issue via MCP | payload mapeado |
 | update_issue version conflict | erro formatado |
 | Transporte STDIO | mensagens JSON-RPC |
+| upload_attachment | arquivo lido e enviado |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] 13 tools expostas.
-- [ ] Schemas compatíveis MCP.
-- [ ] Erros retornam conteúdo descritivo.
-- [ ] CallTool chama HTTP API.
+- [x] 13 tools expostas.
+- [x] Schemas compatíveis MCP (atributos Description).
+- [x] Erros retornam `IsError=true` com conteúdo descritivo.
+- [x] CallTool chama HTTP API via `ITaskboardApiClient`.
 
 ---
 
@@ -290,9 +306,9 @@ Taskboard HTTP API.
 
 1. Criar `Taskboard.Mcp` console app.
 2. Adicionar `ModelContextProtocol` SDK.
-3. Configurar `McpServerBuilder` com transporte STDIO.
-4. Registrar tools.
-5. Implementar handlers injetando `IMediator`.
+3. Configurar `McpServerBuilder` com transporte STDIO (`WithStdioServerTransport()`).
+4. Registrar tools com `[McpServerToolType]` e `[McpServerTool]`.
+5. Implementar handlers injetando `ITaskboardApiClient`.
 6. Testes de integração.
 
 ---
@@ -315,9 +331,10 @@ Taskboard HTTP API.
 
 ## 23. Definition of Done
 
-- [ ] MCP server funcional.
-- [ ] Tools validadas.
-- [ ] Tests passam.
+- [x] MCP server funcional.
+- [x] Tools validadas.
+- [x] Tests passam.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -327,12 +344,12 @@ Taskboard HTTP API.
 
 ## Pending Questions
 
-1. Usar SDK oficial `ModelContextProtocol` .NET ou implementação manual?
-2. Transporte padrão é STDIO ou SSE?
-3. `upload_attachment` lê arquivo local do servidor MCP ou recebe base64?
+1. Usar SDK oficial `ModelContextProtocol` .NET ou implementação manual? (Resolvido: SDK oficial)
+2. Transporte padrão é STDIO ou SSE? (Resolvido: STDIO)
+3. `upload_attachment` lê arquivo local do servidor MCP ou recebe base64? (Resolvido: lê arquivo local do servidor)
 
 ## Human Approval Checklist
 
-- [ ] 13 tools mapeadas.
-- [ ] Schemas compatíveis.
-- [ ] Erros tratados.
+- [x] 13 tools mapeadas.
+- [x] Schemas compatíveis.
+- [x] Erros tratados.

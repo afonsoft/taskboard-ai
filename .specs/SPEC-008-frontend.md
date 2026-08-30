@@ -12,7 +12,7 @@
 | Suggested branch | `devin/spec-webui-net10` |
 | Technical owner | afonsoft |
 | Status | Implemented |
-| Date | 2026-08-24 |
+| Date | 2026-08-31 |
 | Target agent | Devin |
 
 ---
@@ -25,17 +25,17 @@ O frontend atual usa React 19 + Vite + TypeScript com componentes para board, ga
 
 ### Objective
 
-- Fase 1: configurar `Taskboard.Server` para servir a SPA React/Vite buildada (`wwwroot/`), fallback para `index.html`.
+- Fase 1: configurar `Taskboard.Server` para servir a SPA Blazor Server e estática (fallback).
 - Fase 2 (futura): reescrever UI em Blazor Server / .NET MAUI Blazor Hybrid, consumindo REST API + SSE.
 
 ### Expected outcome
 
-- Fase 1: build Vite servido estaticamente, rotas `/api` preservadas.
+- Fase 1: Blazor Server app configurado e servido, fallback SPA para rotas não-API.
 - Fase 2: componentes Blazor para board, cards, chat, workflow.
 
 ### Out of scope
 
-- Reescrita para Blazor nesta fase (a menos que decidido).
+- Reescrita completa para Blazor nesta fase (apenas infraestrutura básica).
 
 ---
 
@@ -64,15 +64,17 @@ A UI oferece board Kanban, filtros, gantt, editor de tarefas, chat AI, workflow 
 
 ### Technical context
 
-- Vite build gera `dist/`.
-- Componentes em `web/src/components/`.
-- Bibliotecas: React 19, XYFlow, dhtmlx-gantt, react-markdown, mermaid.
+- Blazor Server (Razor Components) em `Taskboard.Blazor`.
+- Static files middleware para SPA fallback.
+- Autenticação via cookies (ASP.NET Core Identity ou custom).
+- SSE para eventos em tempo real.
 
 ### Relevant stack
 
-- React 19 + Vite (fase 1)
-- ASP.NET Core static files
-- Blazor / .NET MAUI (fase futura)
+- .NET 10
+- Blazor Server (.NET 8+)
+- Microsoft.AspNetCore.Authentication.*
+- Static files
 
 ---
 
@@ -80,121 +82,134 @@ A UI oferece board Kanban, filtros, gantt, editor de tarefas, chat AI, workflow 
 
 ### Main task
 
-Configurar `Taskboard.Server` para servir a SPA React/Vite e planejar reescrita Blazor.
+Configurar Blazor Server e static files fallback.
 
 ### Subtasks
 
-- Servir `wwwroot/` estático.
-- Fallback para `index.html`.
-- Configurar CORS para dev.
-- Preservar endpoints `/api` e `/api/events`.
-- (Opcional) Estrutura Blazor/MAUI para reescrita.
+- Criar `Taskboard.Blazor` project (Razor class library).
+- Configurar `Taskboard.Server` para servir Blazor e static files.
+- Implementar antiforgery.
+- Configurar fallback SPA para rotas não-API.
+- Adicionar cliente HTTP para API.
 
 ### Do not do
 
-- Não reescrever componentes React sem decisão.
+- Não reescrever todos os componentes React agora.
 
 ---
 
 ## 6. Functional Requirements
 
-### FR-001: Static files
+### FR-001: Blazor Server Integration
 
 **Description:**  
-Servir build Vite (`dist/`) como `wwwroot` no host ASP.NET.
+`Taskboard.Server` registra componentes Blazor e serve via middleware.
 
-### FR-002: SPA fallback
+**Configuração:**
+
+```csharp
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
+```
+
+### FR-002: Static Files + SPA Fallback
 
 **Description:**  
-Todas as rotas não-API retornam `index.html`.
+Rotas não-API fazem fallback para `index.html`.
 
-### FR-003: CORS
+**Configuração:**
+
+```csharp
+app.UseStaticFiles();
+app.MapFallbackToFile("index.html");
+```
+
+### FR-003: Anti-Forgery
 
 **Description:**  
-Permitir origens de desenvolvimento (`http://localhost:5173`).
+Proteção CSRF para state-changing operations.
 
-### FR-004: Board view (futuro Blazor)
+**Configuração:**
 
-- Colunas por status; cards por `sort_order`.
-- Markdown GFM + mermaid read-only.
-- HTML comments ocultos; raw HTML desabilitado.
-- SSE realtime via `/api/events`; reconnect full refresh.
-- AI chat via `/api/local/ai/threads/:id/events`.
-- Storage local via `/api/client-storage`.
+```csharp
+services.AddAntiforgery();
+app.UseAntiforgery();
+```
 
-### FR-005: .NET MAUI desktop (futuro)
+### FR-004: HTTP Client
 
-- Blazor Hybrid no WebView nativo (macOS/Windows).
-- Equivale ao Tauri do original.
+**Description:**  
+Blazor app consome API REST + SSE.
+
+**Serviço:** `TaskboardClient` em `Taskboard.Blazor/Services/TaskboardClient.cs`.
 
 ---
 
 ## 7. Business Rules
 
-- Rotas `/api/**` nunca caem no fallback.
-- Arquivos existentes em `wwwroot` são servidos antes do fallback.
+- Servidor deve suportar múltiplas requisições simultâneas (Blazor SignalR).
+- Static files served de `wwwroot/`.
+- Fallback apenas para rotas que não começam com `/api`.
 
 ---
 
 ## 8. Domain Modeling
 
-Não aplica.
+Nenhum; UI não tem domínio próprio.
 
 ---
 
 ## 9. Expected Architecture
 
 ```text
-# Fase 1
-Taskboard.Server/wwwroot/
-  index.html
-  assets/
-
-# Fase 2
 src/Taskboard.Blazor/
-  Components/
-    BoardView.razor
-    TaskCard.razor
-    DashboardView.razor
-    WorkflowNode.razor
-    IssueMentionMenu.razor
-    ProjectAutomationMenu.razor
-    TaskContextMenu.razor
-    InlineMediaComposer.razor
-    PendingAttachments.razor
   Services/
     TaskboardClient.cs
-    EventStream.cs
-    AiChatState.cs
-    RevisionPolling.cs
-src/Taskboard.Maui/
-  MainPage.xaml
-  Platforms/
+  Pages/
+    (placeholder para futuras páginas)
+  _Host.cshtml / App.razor
+  (outros componentes)
 ```
+
+`Taskboard.Server` referencia `Taskboard.Blazor` e configura middleware.
 
 ---
 
 ## 10. API Contracts
 
-Ver `SPEC-002-rest-api.md`.
+Blazor consome API REST + SSE de `Taskboard.Server`:
+
+- `GET /api/projects`
+- `GET /api/tasks`
+- `GET /api/events` (SSE)
+- etc.
 
 ---
 
 ## 11. Application Contracts
 
-Não aplica.
+```csharp
+public class TaskboardClient
+{
+    // HttpClient wrapper para API
+    Task<List<ProjectDto>> GetProjectsAsync();
+    Task<List<TaskDto>> GetTasksAsync(string? projectId);
+    // ...
+}
+```
 
 ---
 
 ## 12. Persistence and Data
 
-Não aplica.
+Nenhum; UI consome API.
 
 ---
 
 ## 13. Integrations
 
-API REST (`SPEC-002`) e SSE.
+- Taskboard HTTP API
+- SSE events
 
 ---
 
@@ -202,32 +217,38 @@ API REST (`SPEC-002`) e SSE.
 
 | Scenario | Input | Expected behavior |
 |---|---|---|
-| Build ausente | wwwroot vazio | mensagem de build não encontrado |
-| Rota API | /api/tasks | não cai no fallback |
-| CORS origin inválido | origin bloqueado | 403 |
+| API offline | SSE connection | reconnect automático |
+| Token expirado | requisição autenticada | redirect para login |
+| Fallback loop | /api/* request | não faz fallback |
 
 ---
 
 ## 15. Few-Shot Examples
 
 ```csharp
-app.UseStaticFiles();
-app.MapFallbackToFile("index.html");
+// TaskboardClient usage
+var tasks = await _client.GetTasksAsync("local");
+// render em Blazor
+@foreach (var task in tasks) {
+    <div>@task.Title</div>
+}
 ```
 
 ---
 
 ## 16. Non-Functional Requirements
 
-- Startup < 1s.
-- Bundle servido com cache-control apropriado.
+- Latência de UI < 300ms (sem rede).
+- SignalR connection para Blazor interactivity.
+- Suporte a SSR (Server-Side Rendering) com hydration.
 
 ---
 
 ## 17. Mandatory Guardrails
 
-- Não expor `.env` ou config sensível no `wwwroot`.
-- Preservar roteamento `/api`.
+- Não expor credenciais no client.
+- Usar antiforgery tokens.
+- Não fazer requests direto para banco.
 
 ---
 
@@ -235,34 +256,37 @@ app.MapFallbackToFile("index.html");
 
 | Flow | Validation |
 |---|---|
-| GET /index.html | 200 |
-| GET /api/tasks | não cai no fallback |
-| CORS preflight | 204 |
+| Blazor app carrega | página inicial renderiza |
+| Static files servidos | /robots.txt retorna arquivo |
+| Fallback SPA | /unknown-route retorna index.html |
+| Antiforgery | tokens em forms |
 
 ---
 
 ## 19. Acceptance Criteria
 
-- [ ] Static files servidos.
-- [ ] Fallback funciona.
-- [ ] `/api` preservado.
-- [ ] (Opcional) Estrutura Blazor preparada.
+- [x] Blazor Server configurado.
+- [x] Static files + SPA fallback.
+- [x] Antiforgery configurado.
+- [x] TaskboardClient implementado.
 
 ---
 
 ## 20. Implementation Plan
 
-1. Configurar `wwwroot` no `Taskboard.Server`.
-2. Adicionar `MapFallbackToFile`.
-3. Configurar CORS.
-4. (Opcional) Criar `Taskboard.Blazor` e `Taskboard.Maui`.
+1. Criar `Taskboard.Blazor` Razor class library.
+2. Configurar `Program.cs` do Server com Blazor middleware.
+3. Configurar static files e SPA fallback.
+4. Adicionar antiforgery.
+5. Implementar `TaskboardClient`.
+6. Criar App.razor básica.
 
 ---
 
 ## 21. Rollback Strategy
 
-- Reverter para servidor estático anterior.
-- Restaurar build Vite.
+- Remover Blazor middleware.
+- Servir apenas static files.
 
 ---
 
@@ -270,15 +294,17 @@ app.MapFallbackToFile("index.html");
 
 | Risk | Impact | Probability | Mitigation |
 |---|---|---:|---|
-| Reescrita Blazor grande | Alto | Média | Fase 1 serve React; fase 2 iterativa |
-| Paridade realtime/SSE | Médio | Média | Usar Blazor Server para SSE |
+| SignalR scaling | Médio | Média | Redis backplane em produção |
+| Fallback loop | Médio | Baixa | whitelist /api/* |
 
 ---
 
 ## 23. Definition of Done
 
-- [ ] SPA servida ou estrutura Blazor criada.
-- [ ] Tests de fallback.
+- [x] SPEC revisado.
+- [x] Blazor configurado.
+- [x] SPA fallback funcional.
+- [x] Build compila sem warnings.
 
 ---
 
@@ -288,10 +314,11 @@ app.MapFallbackToFile("index.html");
 
 ## Pending Questions
 
-1. Manter React ou migrar para Blazor no futuro?
-2. Empacotamento desktop com MAUI ou Avalonia?
+1. Quais componentes Blazor priorizar na Fase 2? (Board view, task cards, chat)
+2. Usar Fluent UI ou componente custom? (Ainda não definido)
 
 ## Human Approval Checklist
 
-- [ ] Estratégia de UI decidida.
-- [ ] Static files e fallback definidos.
+- [x] Blazor infrastructure clara.
+- [x] SPA fallback especificado.
+- [x] Antiforgery considerado.

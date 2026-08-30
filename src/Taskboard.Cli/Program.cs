@@ -39,10 +39,6 @@ internal static class Program
             config.AddCommand<CloudLoginCommand>("cloud:login");
             config.AddCommand<CloudStatusCommand>("cloud:status");
             config.AddCommand<CloudLogoutCommand>("cloud:logout");
-
-            config.AddCommand<ContextCurrentCommand>("context:current");
-            config.AddCommand<ProjectListCommand>("project:list");
-            config.AddCommand<ProjectCreateCommand>("project:create");
         });
 
         try

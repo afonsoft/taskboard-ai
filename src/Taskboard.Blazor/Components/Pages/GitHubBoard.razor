@@ -1,0 +1,21 @@
+@page "/github-board"
+
+<PageTitle>GitHub Board</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">TaskBoard AI - GitHub</MudText>
+
+<RepositorySelector OnRepositorySelected="OnRepositorySelected" />
+
+@if (!string.IsNullOrWhiteSpace(_selectedRepositoryFullName))
+{
+    <KanbanBoard RepositoryFullName="_selectedRepositoryFullName" />
+}
+
+@code {
+    private string? _selectedRepositoryFullName;
+
+    private void OnRepositorySelected(string repositoryFullName)
+    {
+        _selectedRepositoryFullName = repositoryFullName;
+    }
+}

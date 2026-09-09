@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Taskboard;
 using Taskboard.Application.AiChat;
@@ -19,7 +20,9 @@ using Taskboard.Blazor.Services;
 using Taskboard.EntityFrameworkCore;
 using Taskboard.EntityFrameworkCore.Data;
 using Taskboard.Integrations.Execution;
+using Taskboard.Integrations.GitHub;
 using Taskboard.Integrations.Jira;
+using Taskboard.GitHub;
 using Taskboard.Json;
 using Taskboard.Repositories;
 using Taskboard.Requests;
@@ -75,6 +78,8 @@ builder.Services.AddHttpClient<TaskboardClient>(client =>
 });
 
 builder.Services.AddRazorComponents();
+builder.Services.AddMudServices();
+builder.Services.AddScoped<IGitHubService, GitHubService>();
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>

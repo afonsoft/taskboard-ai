@@ -1,0 +1,87 @@
+@inject IGitHubService GitHubService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" IsValidChanged="OnValidChanged">
+            <MudTextField T="string"
+                          Label="Título"
+                          @bind-Value="_title"
+                          Required="true"
+                          RequiredError="O título é obrigatório."
+                          Counter="250"
+                          MaxLength="250" />
+            <MudTextField T="string"
+                          Label="Descrição"
+                          @bind-Value="_body"
+                          Lines="5"
+                          Class="mt-4" />
+            <MudSelect T="GitHubBoardColumn"
+                       Label="Coluna Inicial"
+                       @bind-Value="_initialColumn"
+                       ToStringFunc="c => c.ToLabel()"
+                       Class="mt-4">
+                @foreach (var column in Enum.GetValues<GitHubBoardColumn>())
+                {
+                    <MudSelectItem Value="column">@column.ToLabel()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync" Disabled="_isSubmitting || !_isValid">
+            @if (_isSubmitting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salvar
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    public IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string RepositoryFullName { get; set; } = string.Empty;
+
+    private MudForm _form = default!;
+    private string _title = string.Empty;
+    private string? _body;
+    private GitHubBoardColumn _initialColumn = GitHubBoardColumn.Backlog;
+    private bool _isSubmitting;
+    private bool _isValid;
+
+    private void OnValidChanged(bool valid) => _isValid = valid;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task SubmitAsync()
+    {
+        await _form.ValidateAsync();
+
+        if (!_isValid)
+        {
+            return;
+        }
+
+        _isSubmitting = true;
+
+        try
+        {
+            await GitHubService.CreateIssueAsync(RepositoryFullName, _title, _body, _initialColumn);
+            Snackbar.Add("Issue criada com sucesso.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao criar issue: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isSubmitting = false;
+        }
+    }
+}

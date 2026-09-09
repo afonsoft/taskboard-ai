@@ -4,5 +4,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Taskboard.Application.Contracts/Taskboard.Application.Contracts.csproj" />
+    <PackageReference Include="Octokit" />
   </ItemGroup>
 </Project>

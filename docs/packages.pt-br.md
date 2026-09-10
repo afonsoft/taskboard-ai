@@ -7,9 +7,13 @@
 | `Microsoft.EntityFrameworkCore.Sqlite` | Provider SQLite do EF Core |
 | `Microsoft.EntityFrameworkCore.Tools` | CLI de migrations |
 | `MediatR` | Commands/queries CQRS |
+| `Microsoft.Extensions.Hosting` | Serviços em background e orquestração hospedada de agentes |
 | `Microsoft.AspNetCore.OpenApi` / `Swashbuckle.AspNetCore` | Documentação OpenAPI |
+| `Microsoft.AspNetCore.SignalR.Client` | Cliente SignalR para logs de agentes em tempo real |
 | `System.CommandLine` | Parsing de CLI |
 | `ModelContextProtocol` | Servidor MCP |
+| `Octokit` | Integração com a API do GitHub |
+| `MudBlazor` | Componentes de UI para Blazor |
 | `xunit` | Testes unitários |
 | `Shouldly` | Asserções fluentes |
 | `NSubstitute` | Mocks |

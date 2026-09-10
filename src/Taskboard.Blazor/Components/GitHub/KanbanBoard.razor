@@ -1,4 +1,5 @@
 @inject IGitHubService GitHubService
+@inject IAgentOrchestrationService OrchestrationService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 
@@ -38,7 +39,8 @@ else if (_columns is not null)
                     {
                         <div class="kanban-card"
                              draggable="true"
-                             @ondragstart="() => OnDragStart(issue, column.Column)">
+                             @ondragstart="() => OnDragStart(issue, column.Column)"
+                             @onclick="() => OpenTaskDetailAsync(issue)">
                             <div class="kanban-card-title">@issue.Title</div>
                             <div class="kanban-card-meta">
                                 <span>#@issue.Number</span>
@@ -126,10 +128,33 @@ else if (_columns is not null)
             return;
         }
 
+        var issue = _draggedIssue;
+        var fromColumn = _draggedFromColumn;
+
+        _draggedIssue = null;
+        _draggedFromColumn = null;
+
         try
         {
-            await GitHubService.UpdateIssueColumnAsync(RepositoryFullName, _draggedIssue.Number, _draggedFromColumn, toColumn);
-            Snackbar.Add($"Issue #{_draggedIssue.Number} movida para {toColumn.ToLabel()}.", Severity.Success);
+            if (toColumn is GitHubBoardColumn.InProgress or GitHubBoardColumn.Backlog)
+            {
+                var request = await OpenAgentSelectionModalAsync(issue);
+                if (request is null)
+                {
+                    return;
+                }
+
+                await GitHubService.UpdateIssueColumnAsync(RepositoryFullName, issue.Number, fromColumn, toColumn);
+                await GitHubService.AddLabelsToIssueAsync(RepositoryFullName, issue.Number, [request.AgentType.ToLabel()]);
+                await OrchestrationService.EnqueueAsync(request);
+                Snackbar.Add($"Issue #{issue.Number} movida para {toColumn.ToLabel()} e agente {request.AgentType} iniciado.", Severity.Success);
+            }
+            else
+            {
+                await GitHubService.UpdateIssueColumnAsync(RepositoryFullName, issue.Number, fromColumn, toColumn);
+                Snackbar.Add($"Issue #{issue.Number} movida para {toColumn.ToLabel()}.", Severity.Success);
+            }
+
             await LoadIssuesAsync();
         }
         catch (Exception ex)
@@ -137,11 +162,38 @@ else if (_columns is not null)
             _errorMessage = $"Erro ao mover issue: {ex.Message}";
             Snackbar.Add(_errorMessage, Severity.Error);
         }
-        finally
+    }
+
+    private async Task<AgentExecutionRequest?> OpenAgentSelectionModalAsync(IssueDto issue)
+    {
+        var parameters = new DialogParameters<AgentSelectionModal>
         {
-            _draggedIssue = null;
-            _draggedFromColumn = null;
+            { d => d.Issue, issue },
+            { d => d.RepositoryFullName, RepositoryFullName }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<AgentSelectionModal>("Selecionar Agente CLI", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is null || result.Canceled || result.Data is not AgentExecutionRequest request)
+        {
+            return null;
         }
+
+        return request;
+    }
+
+    private async Task OpenTaskDetailAsync(IssueDto issue)
+    {
+        var parameters = new DialogParameters<TaskDetailDialog>
+        {
+            { d => d.Issue, issue },
+            { d => d.RepositoryFullName, RepositoryFullName }
+        };
+
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Large, FullWidth = true };
+        await DialogService.ShowAsync<TaskDetailDialog>($"Issue #{issue.Number}", parameters, options);
     }
 
     private async Task OpenNewTaskDialogAsync()

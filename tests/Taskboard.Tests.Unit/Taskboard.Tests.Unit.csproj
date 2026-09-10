@@ -7,6 +7,7 @@
     <ProjectReference Include="../../src/Taskboard.Application/Taskboard.Application.csproj" />
     <ProjectReference Include="../../src/Taskboard.Application.Contracts/Taskboard.Application.Contracts.csproj" />
     <ProjectReference Include="../../src/Taskboard.Domain/Taskboard.Domain.csproj" />
+    <ProjectReference Include="../../src/Taskboard.Integrations/Taskboard.Integrations.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

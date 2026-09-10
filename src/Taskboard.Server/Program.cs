@@ -19,11 +19,14 @@ using Taskboard.Blazor;
 using Taskboard.Blazor.Services;
 using Taskboard.EntityFrameworkCore;
 using Taskboard.EntityFrameworkCore.Data;
+using Taskboard.Integrations.Agents;
 using Taskboard.Integrations.Execution;
 using Taskboard.Integrations.GitHub;
 using Taskboard.Integrations.Jira;
+using Taskboard.Agents;
 using Taskboard.GitHub;
 using Taskboard.Json;
+using Taskboard.Server.Hubs;
 using Taskboard.Repositories;
 using Taskboard.Requests;
 using Taskboard.Server.Mapping;
@@ -79,7 +82,14 @@ builder.Services.AddHttpClient<TaskboardClient>(client =>
 
 builder.Services.AddRazorComponents();
 builder.Services.AddMudServices();
-builder.Services.AddScoped<IGitHubService, GitHubService>();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IGitHubService, GitHubService>();
+builder.Services.AddSingleton<IAgentDiscoveryService, AgentDiscoveryService>();
+builder.Services.AddSingleton<IAgentAcpClient, LocalCliAgentAcpClient>();
+builder.Services.AddSingleton<IAgentAdapter, KnownCliAgentAdapter>();
+builder.Services.AddSingleton<IAgentLogBroadcaster, SignalRAgentLogBroadcaster>();
+builder.Services.AddSingleton<IAgentOrchestrationService, AgentOrchestrationService>();
+builder.Services.AddHostedService(sp => (AgentOrchestrationService)sp.GetRequiredService<IAgentOrchestrationService>());
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -879,6 +889,7 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>();
+app.MapHub<AgentLogHub>("/agent-log-hub");
 
 app.Run();
 
@@ -921,5 +932,4 @@ static async System.Threading.Tasks.Task PublishEventsAsync(IEventStreamService 
         await eventStream.PublishAsync(MapDomainEvent(domainEvent));
     }
 }
-
 

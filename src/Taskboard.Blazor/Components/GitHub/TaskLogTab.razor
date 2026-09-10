@@ -1,0 +1,91 @@
+@inject IAgentOrchestrationService OrchestrationService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+@implements IAsyncDisposable
+
+<div class="agent-log-tab">
+    <div class="agent-log-header">
+        <MudText Typo="Typo.subtitle2">Logs do Agente</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small" OnClick="CancelAsync">
+            Cancelar
+        </MudButton>
+    </div>
+
+    <div class="agent-log-console" id="log-console-@IssueId">
+        @foreach (var message in _messages)
+        {
+            <div class="agent-log-line agent-log-@GetStreamCssClass(message.Stream)">
+                <span class="agent-log-timestamp">@message.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                <span class="agent-log-content">@message.Content</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string IssueId { get; set; } = string.Empty;
+
+    private readonly List<AgentLogMessage> _messages = [];
+    private HubConnection? _hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var existingLogs = await OrchestrationService.GetLogsAsync(IssueId);
+        _messages.AddRange(existingLogs);
+
+        var hubUrl = NavigationManager.ToAbsoluteUri("/agent-log-hub");
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(hubUrl)
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hubConnection.On<AgentLogMessage>("ReceiveLog", message =>
+        {
+            if (message.IssueId == IssueId)
+            {
+                _messages.Add(message);
+                InvokeAsync(StateHasChanged);
+            }
+        });
+
+        await _hubConnection.StartAsync();
+        await _hubConnection.InvokeAsync("SubscribeToIssue", IssueId);
+    }
+
+    private async Task CancelAsync()
+    {
+        try
+        {
+            await OrchestrationService.CancelAsync(IssueId);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao cancelar: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private static string GetStreamCssClass(AgentLogStream stream) => stream switch
+    {
+        AgentLogStream.StdOut => "stdout",
+        AgentLogStream.StdErr => "stderr",
+        AgentLogStream.System => "system",
+        _ => "system"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection is not null)
+        {
+            try
+            {
+                await _hubConnection.InvokeAsync("UnsubscribeFromIssue", IssueId);
+                await _hubConnection.DisposeAsync();
+            }
+            catch
+            {
+                // Ignora erros de cleanup do hub.
+            }
+        }
+    }
+}

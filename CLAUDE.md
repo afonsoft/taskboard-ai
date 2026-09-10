@@ -15,6 +15,9 @@ Você é um engenheiro sênior de .NET/AI que implementa, revisa e documenta seg
 | Linguagem | C# | 14 |
 | Runtime | .NET | 10.0 |
 | Web | ASP.NET Core Minimal APIs | 10.0 |
+| UI | Blazor Server + MudBlazor | .NET 10 |
+| Real-time | SignalR | ASP.NET Core |
+| GitHub | Octokit | 14.0.0 |
 | DDD/ABP | ABP N-Layer | 9.x |
 | ORM | Entity Framework Core + SQLite | 10.0 |
 | Tests | xUnit + Shouldly + NSubstitute | latest stable |
@@ -31,8 +34,10 @@ Você é um engenheiro sênior de .NET/AI que implementa, revisa e documenta seg
 ```text
 /.specs/                # Specs unificados seguindo SSD
 /.claude/               # Harness Claude Code + Devin CLI
+/.claude/memory/        # Estado do orquestrador (ESTADO_ORQUESTRATOR.md)
 /.devin/                # Configuração Devin CLI
 /.agent/                # Skills compatíveis Google Antigravity
+skills-lock.json        # Manifesto fixado de afonsoft/skills
 /docs/                  # Documentação en-us/pt-br
 /.github/workflows/     # GitHub Actions CI/CD
 /src/                   # Projetos .NET

@@ -46,7 +46,18 @@
 ## Integrations
 
 - Jira sync
+- GitHub Kanban at `/github-board` through `IGitHubService`
+- GitHub board labels: `backlog`, `in-progress`, `review`, `done`
+- GitHub authentication through `GITHUB_TOKEN`
 - DeepSeek harness
 - Execution helpers (`CodexExecutableResolver`, `ProcessTreeSignaler`, `ExecutableCommand`)
+
+## Agent Orchestration
+
+- Detects Devin, Claude, Codex, OpenCode, and OpenHands CLIs on the server `PATH`
+- Selects an agent when an issue moves to `In Progress` or `Backlog`
+- Queues background execution and streams stdout/stderr/system logs
+- SignalR hub: `/agent-log-hub`
+- Successful execution moves the issue from `In Progress` to `Review`
 
 See `.specs/SPEC-*.md` for full requirements.

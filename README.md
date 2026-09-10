@@ -22,9 +22,9 @@ src/
   Taskboard.AiChat/            # AI chat threads/runs/events
   Taskboard.Workflow/          # Workflow workspaces + automation
   Taskboard.Cloud/             # Cloud companion + sync
-  Taskboard.Integrations/      # Jira, DeepSeek, execution helpers
+  Taskboard.Integrations/      # Jira, GitHub, agent orchestration, execution helpers
   Taskboard.Maui/              # Optional desktop Blazor Hybrid
-  Taskboard.Blazor/            # Optional future web UI
+  Taskboard.Blazor/            # Blazor Server web UI
 tests/
   Taskboard.Domain.Tests/
   Taskboard.Application.Tests/
@@ -51,6 +51,20 @@ dotnet run --project src/Taskboard.Server
 # Run CLI
 dotnet run --project src/Taskboard.Cli -- --help
 ```
+
+## GitHub Kanban & AI Agents
+
+Set `GITHUB_TOKEN` before starting the server:
+
+```bash
+export GITHUB_TOKEN=your-github-token
+```
+
+Open `/github-board` to view GitHub issues as a Kanban board. Drag an issue to
+**In Progress**, select an installed agent, and follow execution in the
+**Logs** tab. The supported CLIs are Devin, Claude, Codex, OpenCode, and
+OpenHands. Real-time agent logs are streamed through the SignalR hub at
+`/agent-log-hub`.
 
 ## Build Order
 
@@ -81,6 +95,15 @@ See [`.specs/CAPABILITY-MAP.md`](.specs/CAPABILITY-MAP.md).
 - [`.claude/`](.claude/) — Claude Code / Devin CLI harness
 - [`.devin/config.json`](.devin/config.json) — Devin CLI configuration
 - [`.agent/skills/`](.agent/skills/) — Google Antigravity skills
+
+The agent harness uses skills from [`afonsoft/skills`](https://github.com/afonsoft/skills):
+
+```bash
+npx skills add afonsoft/skills
+```
+
+This installs skills into `.claude/skills` and `.devin/skills`; `skills-lock.json`
+records the locked skill sources.
 
 ## Contributing
 

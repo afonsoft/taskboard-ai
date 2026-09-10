@@ -1,0 +1,122 @@
+@inject IAgentOrchestrationService OrchestrationService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.h6" Class="mb-4">Selecionar Agente CLI</MudText>
+
+        @if (_isLoading)
+        {
+            <div class="d-flex align-center">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" Class="mr-2" />
+                <MudText>Detectando agentes...</MudText>
+            </div>
+        }
+        else if (_agents is not null)
+        {
+            <MudSelect T="AgentInfo"
+                       Label="Agente"
+                       @bind-Value="_selectedAgent"
+                       ToStringFunc="FormatAgent"
+                       Class="mb-4">
+                @foreach (var agent in _agents)
+                {
+                    <MudSelectItem Value="agent" Disabled="agent.Status != AgentStatus.Available">@agent.Name (@agent.Status)</MudSelectItem>
+                }
+            </MudSelect>
+
+            <MudTextField T="string"
+                          Label="Branch de trabalho"
+                          @bind-Value="_branch"
+                          Class="mb-2" />
+
+            <MudTextField T="string"
+                          Label="Escopo"
+                          @bind-Value="_scope"
+                          Class="mb-2" />
+
+            <MudTextField T="string"
+                          Label="Instruções"
+                          @bind-Value="_instructions"
+                          Lines="5"
+                          Required="true"
+                          RequiredError="As instruções são obrigatórias."
+                          Class="mb-2" />
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirm" Disabled="!CanConfirm()">
+            Iniciar Agente
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    public IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public IssueDto Issue { get; set; } = default!;
+
+    [Parameter, EditorRequired]
+    public string RepositoryFullName { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? DefaultRepoPath { get; set; }
+
+    private bool _isLoading;
+    private IReadOnlyList<AgentInfo>? _agents;
+    private AgentInfo? _selectedAgent;
+    private string _branch = string.Empty;
+    private string _scope = string.Empty;
+    private string _instructions = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _isLoading = true;
+
+        try
+        {
+            _agents = await OrchestrationService.GetAvailableAgentsAsync();
+            _selectedAgent = _agents.FirstOrDefault(a => a.Status == AgentStatus.Available);
+            _instructions = string.IsNullOrWhiteSpace(Issue.Body)
+                ? $"Resolve a issue #{Issue.Number}: {Issue.Title}"
+                : Issue.Body;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erro ao detectar agentes: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private static string FormatAgent(AgentInfo? agent) => agent is null ? string.Empty : $"{agent.Name} ({agent.Status})";
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private bool CanConfirm() => _selectedAgent is not null && _selectedAgent.Status == AgentStatus.Available && !string.IsNullOrWhiteSpace(_instructions);
+
+    private void Confirm()
+    {
+        if (_selectedAgent is null)
+        {
+            return;
+        }
+
+        var request = new AgentExecutionRequest(
+            Issue.Id.ToString(),
+            Issue.Number,
+            RepositoryFullName,
+            DefaultRepoPath ?? string.Empty,
+            _branch,
+            _scope,
+            _instructions,
+            _selectedAgent.Type);
+
+        MudDialog.Close(DialogResult.Ok(request));
+    }
+}

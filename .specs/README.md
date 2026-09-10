@@ -24,6 +24,7 @@ The merged set consolidates content from the original `.specs/` and `.specs2/` d
 | [SPEC-009-skill.md](SPEC-009-skill.md) | Skills | `manage-taskboard` agent skill and references |
 | [SPEC-010-integrations.md](SPEC-010-integrations.md) | Integrations | Jira sync, DeepSeek harness, shared execution modules |
 | [SPEC-011-persistence.md](SPEC-011-persistence.md) | Persistence | EF Core + SQLite schema, migrations, indexes, repositories |
+| [SPEC-015-agent-orchestration.md](SPEC-015-agent-orchestration.md) | Agents | CLI agent discovery, ACP adapter, background orchestration, SignalR log streaming |
 
 ## Conventions
 

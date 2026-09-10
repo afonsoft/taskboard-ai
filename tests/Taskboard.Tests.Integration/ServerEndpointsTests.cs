@@ -57,7 +57,7 @@ public class ServerEndpointsTests : IClassFixture<WebApplicationFactory<Program>
         response.StatusCode.ShouldBe(System.Net.HttpStatusCode.Created);
         var created = await response.Content.ReadFromJsonAsync<JsonObject>();
         created.ShouldNotBeNull();
-        
+
         // Response format: { "project": { "id": "...", "name": "..." } }
         var projectObj = created["project"] as JsonObject;
         projectObj.ShouldNotBeNull();

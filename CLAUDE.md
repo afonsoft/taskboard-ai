@@ -45,6 +45,13 @@ skills-lock.json        # Manifesto fixado de afonsoft/skills
 /skills/                # Skill manage-taskboard (Agent Skills)
 ```
 
+## CI/CD
+
+- `.github/workflows/dotnet.yml`: build/test, verificação de formatação, cobertura mínima de 80% e pacotes vulneráveis.
+- `.github/workflows/code-quality.yml`: análise SonarCloud com `SONAR_TOKEN`.
+- `.github/workflows/codeql.yml`: análise CodeQL para C# e GitHub Actions.
+- `.github/dependabot.yml`: atualizações semanais de NuGet e GitHub Actions.
+
 ---
 
 ## Caminhos por Plataforma

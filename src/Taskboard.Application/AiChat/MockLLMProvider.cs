@@ -12,7 +12,7 @@ public sealed class MockLLMProvider : ILLMProvider
         CancellationToken cancellationToken = default)
     {
         var lastUserMessage = messages.LastOrDefault(m => m.Role == "user")?.Content ?? "";
-        
+
         return Task.FromResult(new LLMResponse(
             Content: $"Mock response to: {lastUserMessage}",
             Usage: new LLMUsage(10, 20, 30),
@@ -26,14 +26,14 @@ public sealed class MockLLMProvider : ILLMProvider
     {
         var lastUserMessage = messages.LastOrDefault(m => m.Role == "user")?.Content ?? "";
         var response = $"Mock streaming response to: {lastUserMessage}";
-        
+
         foreach (var word in response.Split(' '))
         {
             cancellationToken.ThrowIfCancellationRequested();
             await Task.Delay(10, cancellationToken);
             yield return new LLMStreamChunk(ContentDelta: word + " ");
         }
-        
+
         yield return new LLMStreamChunk(
             ContentDelta: null,
             IsComplete: true,

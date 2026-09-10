@@ -12,6 +12,7 @@ on:
       - '*.sln'
       - '*.props'
       - 'global.json'
+      - '.editorconfig'
       - '.github/workflows/dotnet.yml'
   pull_request:
     branches:
@@ -24,48 +25,123 @@ on:
       - '*.sln'
       - '*.props'
       - 'global.json'
+      - '.editorconfig'
       - '.github/workflows/dotnet.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dotnet-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  SOLUTION_FILE: Taskboard.sln
+  COVERAGE_THRESHOLD: 80
 
 jobs:
   build-and-test:
+    name: Build, Test & Coverage
     runs-on: ubuntu-latest
-    env:
-      DOTNET_NOLOGO: true
-      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+      - name: Setup .NET (global.json)
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: '10.0.x'
-          dotnet-quality: 'ga'
+          global-json-file: global.json
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
       - name: Restore
-        run: dotnet restore Taskboard.sln
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Verify formatting
+        run: dotnet format ${{ env.SOLUTION_FILE }} --verify-no-changes --no-restore --severity warn
 
       - name: Build
-        run: dotnet build Taskboard.sln --configuration Release --no-restore
+        run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test Taskboard.sln --configuration Release --no-build --logger trx --collect:"XPlat Code Coverage"
+        run: >
+          dotnet test ${{ env.SOLUTION_FILE }}
+          --configuration Release
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+
+      - name: Coverage report & threshold
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"TestResults/CoverageReport" \
+            -reporttypes:"Cobertura;MarkdownSummaryGithub" \
+            -assemblyfilters:"-*.Tests.*"
+          cat TestResults/CoverageReport/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+          LINE_RATE=$(grep -oP 'line-rate="\K[0-9.]+' TestResults/CoverageReport/Cobertura.xml | head -1)
+          COVERAGE=$(awk -v r="$LINE_RATE" 'BEGIN { printf "%.2f", r * 100 }')
+          echo "Line coverage: ${COVERAGE}% (threshold: ${COVERAGE_THRESHOLD}%)"
+          awk -v c="$COVERAGE" -v t="$COVERAGE_THRESHOLD" 'BEGIN { exit (c + 0 >= t + 0) ? 0 : 1 }' \
+            || { echo "::error::Line coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"; exit 1; }
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
+          retention-days: 14
           path: |
-            **/TestResults/**/*.trx
-            **/TestResults/**/coverage.cobertura.xml
+            TestResults/**/*.trx
+            TestResults/**/coverage.cobertura.xml
+            TestResults/CoverageReport/**
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
-          files: '**/TestResults/**/coverage.cobertura.xml'
+          files: TestResults/CoverageReport/Cobertura.xml
           fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  vulnerabilities:
+    name: Vulnerable packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET (global.json)
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Check vulnerable packages
+        run: |
+          dotnet list ${{ env.SOLUTION_FILE }} package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -qE 'Severity|has the following vulnerable packages' vulnerable.txt; then
+            echo "::error::Vulnerable NuGet packages detected"
+            exit 1
+          fi

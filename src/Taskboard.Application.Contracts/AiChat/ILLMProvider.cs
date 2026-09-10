@@ -3,12 +3,12 @@ namespace Taskboard.Application.Contracts.AiChat;
 public interface ILLMProvider
 {
     string ModelId { get; }
-    
+
     Task<LLMResponse> CompleteAsync(
         IReadOnlyList<LLMMessage> messages,
         LLMOptions? options = null,
         CancellationToken cancellationToken = default);
-    
+
     IAsyncEnumerable<LLMStreamChunk> StreamAsync(
         IReadOnlyList<LLMMessage> messages,
         LLMOptions? options = null,

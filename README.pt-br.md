@@ -52,6 +52,15 @@ dotnet run --project src/Taskboard.Server
 dotnet run --project src/Taskboard.Cli -- --help
 ```
 
+## Integração Contínua
+
+O GitHub Actions fornece:
+
+- Build e testes em Release, verificação de formatação, gate de cobertura de linhas (atualmente 45%, subindo gradualmente até a meta de 80%) e verificação de pacotes vulneráveis.
+- Análise SonarCloud quando o secret `SONAR_TOKEN` está configurado.
+- Análise CodeQL para C# e GitHub Actions.
+- Atualizações semanais de pacotes NuGet e GitHub Actions através do Dependabot.
+
 ## GitHub Kanban e Agentes de IA
 
 Defina `GITHUB_TOKEN` antes de iniciar o servidor:

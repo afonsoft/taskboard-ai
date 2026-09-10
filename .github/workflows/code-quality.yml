@@ -1,0 +1,127 @@
+name: Code Quality (SonarCloud)
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: sonar-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  SOLUTION_FILE: Taskboard.sln
+  SONAR_ORGANIZATION: afonsoft
+  SONAR_PROJECT_KEY: afonsoft_taskboard-ai
+
+jobs:
+  sonarcloud:
+    name: SonarCloud Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.actor != 'dependabot[bot]'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check SONAR_TOKEN
+        id: sonar
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "SONAR_TOKEN not configured; skipping SonarCloud analysis"
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup .NET (global.json)
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Setup Java
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'zulu'
+
+      - name: Cache NuGet packages
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Cache SonarCloud packages
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.sonar/cache
+          key: sonar-${{ runner.os }}
+          restore-keys: sonar-${{ runner.os }}
+
+      - name: Install SonarScanner
+        if: steps.sonar.outputs.enabled == 'true'
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Restore
+        if: steps.sonar.outputs.enabled == 'true'
+        run: dotnet restore ${{ env.SOLUTION_FILE }}
+
+      - name: Begin analysis
+        if: steps.sonar.outputs.enabled == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >
+          dotnet sonarscanner begin
+          /o:"${{ env.SONAR_ORGANIZATION }}"
+          /k:"${{ env.SONAR_PROJECT_KEY }}"
+          /d:sonar.host.url="https://sonarcloud.io"
+          /d:sonar.token="$SONAR_TOKEN"
+          /d:sonar.scm.provider=git
+          /d:sonar.cs.opencover.reportsPaths="TestResults/**/coverage.opencover.xml"
+          /d:sonar.cs.vstest.reportsPaths="TestResults/**/*.trx"
+          /d:sonar.coverage.exclusions="tests/**,**/Migrations/**,**/*.razor,**/wwwroot/**"
+          /d:sonar.exclusions="**/wwwroot/**,**/Migrations/**,**/bin/**,**/obj/**"
+
+      - name: Build
+        if: steps.sonar.outputs.enabled == 'true'
+        run: dotnet build ${{ env.SOLUTION_FILE }} --configuration Release --no-restore
+
+      - name: Test with coverage
+        if: steps.sonar.outputs.enabled == 'true'
+        run: >
+          dotnet test ${{ env.SOLUTION_FILE }}
+          --configuration Release
+          --no-build
+          --logger "trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+
+      - name: End analysis
+        if: steps.sonar.outputs.enabled == 'true'
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"

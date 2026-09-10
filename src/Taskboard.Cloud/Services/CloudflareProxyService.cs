@@ -34,8 +34,8 @@ public sealed class CloudflareProxyService : ICloudflareProxyService
         _accountId = accountId;
         _databaseId = databaseId;
         _apiToken = apiToken;
-        
-        _httpClient.DefaultRequestHeaders.Authorization = 
+
+        _httpClient.DefaultRequestHeaders.Authorization =
             new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiToken);
     }
 

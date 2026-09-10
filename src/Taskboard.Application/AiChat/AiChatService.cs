@@ -104,7 +104,7 @@ public sealed class AiChatService
         {
             var run = await _runRepo.GetAsync(runId, ct);
             var thread = await _threadRepo.GetAsync(threadId, ct);
-            
+
             if (run is null || thread is null) return;
 
             // Get conversation history
@@ -140,7 +140,7 @@ public sealed class AiChatService
                     run.Complete(chunk.Usage?.TotalTokens ?? 0);
                     break;
                 }
-                
+
                 if (!string.IsNullOrEmpty(chunk.ContentDelta))
                 {
                     var chatEvent = AiChatEvent.Create(
@@ -148,10 +148,10 @@ public sealed class AiChatService
                         threadId,
                         AiChatEventRole.Assistant,
                         chunk.ContentDelta);
-                    
+
                     thread.AddEvent(chatEvent);
                     await _eventRepo.AddAsync(chatEvent, ct);
-                    
+
                     await _threadEvents.PublishAsync(
                         threadId.Value,
                         new ServerSentEvent("ai_chat.event", chatEvent.ToDto()),
@@ -168,19 +168,19 @@ public sealed class AiChatService
         {
             var run = await _runRepo.GetAsync(runId, ct);
             var thread = await _threadRepo.GetAsync(threadId, ct);
-            
+
             if (run != null)
             {
                 run.Fail(-1);
                 await _runRepo.UpdateAsync(run, ct);
             }
-            
+
             if (thread != null)
             {
                 thread.SetStatus(AiChatThreadStatus.Failed);
                 await _threadRepo.UpdateAsync(thread, ct);
             }
-            
+
             await _threadRepo.SaveChangesAsync(ct);
         }
     }

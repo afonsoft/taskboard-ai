@@ -68,7 +68,7 @@ Aplicação `Taskboard.Server` expondo todos os endpoints com ProblemDetails e e
 
 ### Functional context
 
-Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `CODEX_TASKBOARD_PORT` (default `47823`). Serve a SPA Blazor estática e expõe API JSON.
+Servidor local-first escutando em `0.0.0.0`/`127.0.0.1` na porta `TASKBOARD_PORT` (default `47823`). Serve a SPA Blazor estática e expõe API JSON.
 
 ### Technical context
 

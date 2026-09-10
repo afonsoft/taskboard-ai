@@ -68,12 +68,12 @@ internal static class Program
         return CliConfigService.Load().BaseUrl;
     }
 
-    internal static async Task<int> RunAsync(GlobalSettings settings, Func<TaskboardApiClient, CancellationToken, Task<int>> action)
+    internal static async Task<int> RunAsync(GlobalSettings settings, Func<TaskboardApiClient, CancellationToken, Task<int>> action, CancellationToken cancellationToken = default)
     {
         var client = new TaskboardApiClient(ResolveBaseUrl(settings.Url));
         try
         {
-            return await action(client, CancellationToken.None);
+            return await action(client, cancellationToken);
         }
         catch (CliException ex)
         {
@@ -221,7 +221,7 @@ public class GlobalSettings : CommandSettings
 
 public class AppRootCommand : AsyncCommand<EmptySettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, EmptySettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, EmptySettings settings, CancellationToken cancellationToken)
     {
         Console.WriteLine("taskctl - [green]Taskboard CLI[/]");
         Console.WriteLine("Use [blue]taskctl --help[/] para listar comandos.");
@@ -235,12 +235,12 @@ public class ProjectListSettings : GlobalSettings
 
 public class ProjectListCommand : AsyncCommand<ProjectListSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ProjectListSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, ProjectListSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var result = await client.GetAsync("/api/projects", ct);
             return await Program.WriteOutputAsync(settings.Json, result, "projects");
-        });
+        }, cancellationToken);
 }
 
 public class ProjectCreateSettings : GlobalSettings
@@ -257,7 +257,7 @@ public class ProjectCreateSettings : GlobalSettings
 
 public class ProjectCreateCommand : AsyncCommand<ProjectCreateSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ProjectCreateSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, ProjectCreateSettings settings, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(settings.Name))
         {
@@ -269,7 +269,7 @@ public class ProjectCreateCommand : AsyncCommand<ProjectCreateSettings>
             var payload = new CreateProjectRequest(settings.Id, settings.Name!, settings.WorkspacePath);
             var result = await client.PostAsync("/api/projects", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "project");
-        });
+        }, cancellationToken);
     }
 }
 
@@ -284,7 +284,7 @@ public class ProjectMapSettings : GlobalSettings
 
 public class ProjectMapCommand : AsyncCommand<ProjectMapSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ProjectMapSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, ProjectMapSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
@@ -298,7 +298,7 @@ public class ProjectMapCommand : AsyncCommand<ProjectMapSettings>
                 ["workspacePath"] = settings.WorkspacePath,
             };
             return await Program.WriteOutputAsync(settings.Json, node);
-        });
+        }, cancellationToken);
 }
 
 public class IssueListSettings : GlobalSettings
@@ -321,7 +321,7 @@ public class IssueListSettings : GlobalSettings
 
 public class IssueListCommand : AsyncCommand<IssueListSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueListSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueListSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var query = new List<string>();
@@ -338,7 +338,7 @@ public class IssueListCommand : AsyncCommand<IssueListSettings>
             var path = "/api/tasks" + (query.Count > 0 ? "?" + string.Join("&", query) : string.Empty);
             var result = await client.GetAsync(path, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "tasks");
-        });
+        }, cancellationToken);
 }
 
 public class IssueGetSettings : GlobalSettings
@@ -349,7 +349,7 @@ public class IssueGetSettings : GlobalSettings
 
 public class IssueGetCommand : AsyncCommand<IssueGetSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueGetSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueGetSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -360,7 +360,7 @@ public class IssueGetCommand : AsyncCommand<IssueGetSettings>
 
             var result = await client.GetAsync($"/api/tasks/{id}", ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueCreateSettings : GlobalSettings
@@ -392,7 +392,7 @@ public class IssueCreateSettings : GlobalSettings
 
 public class IssueCreateCommand : AsyncCommand<IssueCreateSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueCreateSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueCreateSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
@@ -421,7 +421,7 @@ public class IssueCreateCommand : AsyncCommand<IssueCreateSettings>
 
             var result = await client.PostAsync("/api/tasks", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueUpdateSettings : GlobalSettings
@@ -447,7 +447,7 @@ public class IssueUpdateSettings : GlobalSettings
 
 public class IssueUpdateCommand : AsyncCommand<IssueUpdateSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueUpdateSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueUpdateSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -468,7 +468,7 @@ public class IssueUpdateCommand : AsyncCommand<IssueUpdateSettings>
             var payload = new UpdateTaskRequest(version, patch);
             var result = await client.PatchAsync($"/api/tasks/{id}", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueMoveSettings : GlobalSettings
@@ -485,7 +485,7 @@ public class IssueMoveSettings : GlobalSettings
 
 public class IssueMoveCommand : AsyncCommand<IssueMoveSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueMoveSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueMoveSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             if (string.IsNullOrWhiteSpace(settings.Status))
@@ -502,7 +502,7 @@ public class IssueMoveCommand : AsyncCommand<IssueMoveSettings>
             var payload = new MoveTaskRequest(settings.Status!, settings.SortOrder);
             var result = await client.PostAsync($"/api/tasks/{id}/move", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueArchiveSettings : GlobalSettings
@@ -513,7 +513,7 @@ public class IssueArchiveSettings : GlobalSettings
 
 public class IssueArchiveCommand : AsyncCommand<IssueArchiveSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueArchiveSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueArchiveSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -524,7 +524,7 @@ public class IssueArchiveCommand : AsyncCommand<IssueArchiveSettings>
 
             var result = await client.PostAsync($"/api/tasks/{id}/archive", null, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueRestoreSettings : GlobalSettings
@@ -535,7 +535,7 @@ public class IssueRestoreSettings : GlobalSettings
 
 public class IssueRestoreCommand : AsyncCommand<IssueRestoreSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueRestoreSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueRestoreSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -546,7 +546,7 @@ public class IssueRestoreCommand : AsyncCommand<IssueRestoreSettings>
 
             var result = await client.PostAsync($"/api/tasks/{id}/restore", null, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "task");
-        });
+        }, cancellationToken);
 }
 
 public class IssueRelationSettings : GlobalSettings
@@ -566,7 +566,7 @@ public class IssueRelationSettings : GlobalSettings
 
 public class IssueRelationCommand : AsyncCommand<IssueRelationSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, IssueRelationSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, IssueRelationSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var sourceId = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -595,7 +595,7 @@ public class IssueRelationCommand : AsyncCommand<IssueRelationSettings>
             }
 
             throw new CliException(2, "Ação deve ser 'add' ou 'remove'.");
-        });
+        }, cancellationToken);
 }
 
 public class CommentListSettings : GlobalSettings
@@ -606,7 +606,7 @@ public class CommentListSettings : GlobalSettings
 
 public class CommentListCommand : AsyncCommand<CommentListSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CommentListSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CommentListSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -617,7 +617,7 @@ public class CommentListCommand : AsyncCommand<CommentListSettings>
 
             var result = await client.GetAsync($"/api/tasks/{id}/comments", ct);
             return await Program.WriteOutputAsync(settings.Json, result, "comments");
-        });
+        }, cancellationToken);
 }
 
 public class CommentAddSettings : GlobalSettings
@@ -631,7 +631,7 @@ public class CommentAddSettings : GlobalSettings
 
 public class CommentAddCommand : AsyncCommand<CommentAddSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CommentAddSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CommentAddSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var id = await Program.ResolveTaskIdAsync(client, settings.Identifier, ct);
@@ -643,7 +643,7 @@ public class CommentAddCommand : AsyncCommand<CommentAddSettings>
             var payload = new CreateCommentRequest(settings.Body);
             var result = await client.PostAsync($"/api/tasks/{id}/comments", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "comment");
-        });
+        }, cancellationToken);
 }
 
 public class CommentUpdateSettings : GlobalSettings
@@ -657,7 +657,7 @@ public class CommentUpdateSettings : GlobalSettings
 
 public class CommentUpdateCommand : AsyncCommand<CommentUpdateSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CommentUpdateSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CommentUpdateSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var (taskId, resolvedCommentId) = await Program.ResolveCommentAsync(client, settings.CommentId, ct);
@@ -669,7 +669,7 @@ public class CommentUpdateCommand : AsyncCommand<CommentUpdateSettings>
             var payload = new UpdateCommentRequest(settings.Body);
             var result = await client.PatchAsync($"/api/tasks/{taskId}/comments/{resolvedCommentId}", payload, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "comment");
-        });
+        }, cancellationToken);
 }
 
 public class CommentDeleteSettings : GlobalSettings
@@ -680,7 +680,7 @@ public class CommentDeleteSettings : GlobalSettings
 
 public class CommentDeleteCommand : AsyncCommand<CommentDeleteSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CommentDeleteSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CommentDeleteSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var (taskId, resolvedCommentId) = await Program.ResolveCommentAsync(client, settings.CommentId, ct);
@@ -691,7 +691,7 @@ public class CommentDeleteCommand : AsyncCommand<CommentDeleteSettings>
 
             await client.DeleteAsync($"/api/tasks/{taskId}/comments/{resolvedCommentId}", ct);
             return await Program.WriteOutputAsync(settings.Json, null);
-        });
+        }, cancellationToken);
 }
 
 public class AttachmentUploadSettings : GlobalSettings
@@ -708,7 +708,7 @@ public class AttachmentUploadSettings : GlobalSettings
 
 public class AttachmentUploadCommand : AsyncCommand<AttachmentUploadSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, AttachmentUploadSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, AttachmentUploadSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             if (!File.Exists(settings.File))
@@ -732,7 +732,7 @@ public class AttachmentUploadCommand : AsyncCommand<AttachmentUploadSettings>
 
             var result = await client.PostMultipartAsync("/api/attachments", content, ct);
             return await Program.WriteOutputAsync(settings.Json, result, "attachment");
-        });
+        }, cancellationToken);
 }
 
 public class AttachmentDownloadSettings : GlobalSettings
@@ -746,14 +746,14 @@ public class AttachmentDownloadSettings : GlobalSettings
 
 public class AttachmentDownloadCommand : AsyncCommand<AttachmentDownloadSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, AttachmentDownloadSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, AttachmentDownloadSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             using var stream = File.Create(settings.Output);
             await client.DownloadAsync($"/api/attachments/{settings.AttachmentId}/download", stream, ct);
             var node = new JsonObject { ["downloaded"] = settings.Output };
             return await Program.WriteOutputAsync(settings.Json, node);
-        });
+        }, cancellationToken);
 }
 
 public class CloudLoginSettings : GlobalSettings
@@ -764,7 +764,7 @@ public class CloudLoginSettings : GlobalSettings
 
 public class CloudLoginCommand : AsyncCommand<CloudLoginSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CloudLoginSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CloudLoginSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
@@ -781,7 +781,7 @@ public class CloudLoginCommand : AsyncCommand<CloudLoginSettings>
                 ["cloudUrl"] = config.CloudUrl,
             };
             return await Program.WriteOutputAsync(settings.Json, node);
-        });
+        }, cancellationToken);
 }
 
 public class CloudStatusSettings : GlobalSettings
@@ -790,12 +790,12 @@ public class CloudStatusSettings : GlobalSettings
 
 public class CloudStatusCommand : AsyncCommand<CloudStatusSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CloudStatusSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CloudStatusSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var result = await client.GetAsync("/api/local/cloud-session", ct);
             return await Program.WriteOutputAsync(settings.Json, result);
-        });
+        }, cancellationToken);
 }
 
 public class CloudLogoutSettings : GlobalSettings
@@ -804,7 +804,7 @@ public class CloudLogoutSettings : GlobalSettings
 
 public class CloudLogoutCommand : AsyncCommand<CloudLogoutSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, CloudLogoutSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, CloudLogoutSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
@@ -813,7 +813,7 @@ public class CloudLogoutCommand : AsyncCommand<CloudLogoutSettings>
             CliConfigService.Save(config);
             var node = new JsonObject { ["connected"] = false };
             return await Program.WriteOutputAsync(settings.Json, node);
-        });
+        }, cancellationToken);
 }
 
 public class ContextCurrentSettings : GlobalSettings
@@ -822,7 +822,7 @@ public class ContextCurrentSettings : GlobalSettings
 
 public class ContextCurrentCommand : AsyncCommand<ContextCurrentSettings>
 {
-    public override async Task<int> ExecuteAsync(CommandContext context, ContextCurrentSettings settings)
+    protected override async Task<int> ExecuteAsync(CommandContext context, ContextCurrentSettings settings, CancellationToken cancellationToken)
         => await Program.RunAsync(settings, async (client, ct) =>
         {
             var config = CliConfigService.Load();
@@ -835,5 +835,5 @@ public class ContextCurrentCommand : AsyncCommand<ContextCurrentSettings>
                 ["cloudUrl"] = config.CloudUrl,
             };
             return await Program.WriteOutputAsync(settings.Json, node);
-        });
+        }, cancellationToken);
 }

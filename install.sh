@@ -253,7 +253,7 @@ create_env_file() {
     write_file "$env_file" <<EOF
 # Ambiente gerado por install.sh do taskboard-ai
 export PATH="$BIN_DIR:\$PATH"
-export CODEX_TASKBOARD_DATA_DIR="$data_dir"
+export TASKBOARD_DATA_DIR="$data_dir"
 export TASKBOARD_ADMIN_USERNAME="admin"
 export TASKBOARD_ADMIN_PASSWORD="$password"
 export TASKBOARD_URL="http://127.0.0.1:47823"

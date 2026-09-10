@@ -1,5 +1,7 @@
+using System.IO;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Taskboard.Application.Contracts.Configuration;
 
 namespace Taskboard.EntityFrameworkCore.Data;
 
@@ -7,8 +9,7 @@ public sealed class TaskboardDbContextFactory : IDesignTimeDbContextFactory<Task
 {
     public TaskboardDbContext CreateDbContext(string[] args)
     {
-        var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
-                      ?? Path.Combine(Directory.GetCurrentDirectory(), ".data");
+        var dataDir = TaskboardEnvironment.GetDataDir(Directory.GetCurrentDirectory());
         Directory.CreateDirectory(dataDir);
         var connectionString = $"Data Source={Path.Combine(dataDir, "taskboard.sqlite")}";
 

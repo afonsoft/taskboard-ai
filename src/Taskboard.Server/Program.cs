@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Taskboard;
+using Taskboard.Application.Contracts.Configuration;
 using Taskboard.Application.AiChat;
 using Taskboard.Application.Contracts.AiChat;
 using Taskboard.Domain.Entities;
@@ -39,9 +40,7 @@ using TaskStatus = Taskboard.ValueObjects.TaskStatus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var taskboardPort = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_PORT") ?? "47823";
-var serverUrls = Environment.GetEnvironmentVariable("ASPNETCORE_URLS")
-    ?? $"http://127.0.0.1:{taskboardPort}";
+var serverUrls = TaskboardEnvironment.GetServerUrls();
 builder.WebHost.UseUrls(serverUrls);
 
 builder.Services.AddProblemDetails();
@@ -104,12 +103,10 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 
-var adminDataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
-                   ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
+var adminDataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
 builder.Services.AddSingleton(AdminUser.CreateFromConfiguration(builder.Configuration, adminDataDir));
 
-var dataDir = Environment.GetEnvironmentVariable("CODEX_TASKBOARD_DATA_DIR")
-              ?? Path.Combine(builder.Environment.ContentRootPath, ".data");
+var dataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
 Directory.CreateDirectory(dataDir);
 var connectionString = $"Data Source={Path.Combine(dataDir, "taskboard.sqlite")}";
 

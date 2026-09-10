@@ -56,7 +56,7 @@ dotnet run --project src/Taskboard.Cli -- --help
 
 GitHub Actions provide:
 
-- Build and test in Release mode, format verification, an 80% line-coverage gate, and vulnerable-package checks.
+- Build and test in Release mode, format verification, a line-coverage gate (currently 45%, ratcheting up to the 80% target), and vulnerable-package checks.
 - SonarCloud analysis when the `SONAR_TOKEN` secret is configured.
 - CodeQL analysis for C# and GitHub Actions.
 - Weekly NuGet and GitHub Actions updates through Dependabot.

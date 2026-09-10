@@ -56,7 +56,7 @@ dotnet run --project src/Taskboard.Cli -- --help
 
 O GitHub Actions fornece:
 
-- Build e testes em Release, verificação de formatação, gate de cobertura de linhas de 80% e verificação de pacotes vulneráveis.
+- Build e testes em Release, verificação de formatação, gate de cobertura de linhas (atualmente 45%, subindo gradualmente até a meta de 80%) e verificação de pacotes vulneráveis.
 - Análise SonarCloud quando o secret `SONAR_TOKEN` está configurado.
 - Análise CodeQL para C# e GitHub Actions.
 - Atualizações semanais de pacotes NuGet e GitHub Actions através do Dependabot.

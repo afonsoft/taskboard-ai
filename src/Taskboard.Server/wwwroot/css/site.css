@@ -242,3 +242,54 @@ main {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.agent-log-tab {
+    display: flex;
+    flex-direction: column;
+    height: 400px;
+    background: #1e1e1e;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.agent-log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #2d2d2d;
+    color: #fff;
+}
+
+.agent-log-console {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.85rem;
+    color: #d4d4d4;
+    white-space: pre-wrap;
+}
+
+.agent-log-line {
+    margin-bottom: 0.25rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.agent-log-timestamp {
+    color: #858585;
+    flex-shrink: 0;
+}
+
+.agent-log-stdout {
+    color: #d4d4d4;
+}
+
+.agent-log-stderr {
+    color: #f48771;
+}
+
+.agent-log-system {
+    color: #4fc1ff;
+}

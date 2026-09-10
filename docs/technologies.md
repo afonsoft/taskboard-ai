@@ -11,7 +11,10 @@
 | CLI Parser | System.CommandLine | latest stable |
 | MCP SDK | ModelContextProtocol | latest stable for .NET |
 | Tests | xUnit + Shouldly + NSubstitute | latest stable |
-| Frontend | React/Vite (fase 1) / Blazor (fase 2) | — |
+| Frontend | Blazor Server | .NET 10 |
+| UI Components | MudBlazor | 9.9.0 |
+| Real-time | ASP.NET Core SignalR | 10.0 |
+| GitHub API Client | Octokit | 14.0.0 |
 | AI Providers | OpenAI / Claude / Azure OpenAI (abstracted) | — |
 
 ## Tooling

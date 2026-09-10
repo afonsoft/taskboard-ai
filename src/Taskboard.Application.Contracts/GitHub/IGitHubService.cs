@@ -29,4 +29,9 @@ public interface IGitHubService
     /// Cria uma nova issue no repositório e aplica a label inicial correspondente à coluna informada.
     /// </summary>
     Task<IssueDto> CreateIssueAsync(string repositoryFullName, string title, string? body, GitHubBoardColumn initialColumn, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Adiciona labels extras a uma issue existente.
+    /// </summary>
+    Task AddLabelsToIssueAsync(string repositoryFullName, int issueNumber, IReadOnlyCollection<string> labels, CancellationToken cancellationToken = default);
 }

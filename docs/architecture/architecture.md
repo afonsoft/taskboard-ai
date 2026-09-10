@@ -46,6 +46,14 @@ Specialized modules that extend the core functionality:
 - **Cloud Companion:** Manages local-to-cloud proxying (Cloudflare D1/R2) and session synchronization.
 - **Workflow Engine:** A graph-based engine that automates task transitions (e.g., Auto-claim `todo` $\rightarrow$ `in_progress`).
 - **Integrations:** Handles external synchronization, specifically with the Jira REST API.
+- **Agent Orchestration:** Connects `Application.Contracts/Agents` to
+  `Integrations/Agents`, the `Server` SignalR hub, and the Blazor GitHub
+  components for CLI agent discovery, execution, cancellation, and logs.
+
+The Agents module follows the dependency path
+`Application.Contracts → Integrations → Server hub → Blazor`. `IAgentLogBroadcaster`
+lives in `Application.Contracts` and is implemented by `Taskboard.Server`, so
+`Taskboard.Integrations` does not depend on the Server layer.
 
 ### 🔄 Primary Data Flows
 

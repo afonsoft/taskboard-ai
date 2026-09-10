@@ -127,6 +127,41 @@ public sealed class GitHubService : IGitHubService
         return MapToDto(issue, repositoryFullName);
     }
 
+    /// <inheritdoc />
+    public async Task AddLabelsToIssueAsync(
+        string repositoryFullName,
+        int issueNumber,
+        IReadOnlyCollection<string> labels,
+        CancellationToken cancellationToken = default)
+    {
+        EnsureAuthenticated();
+        var (owner, name) = SplitRepositoryName(repositoryFullName);
+
+        if (labels.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var label in labels)
+        {
+            await EnsureLabelExistsAsync(owner, name, label, cancellationToken);
+        }
+
+        await _client.Issue.Labels.AddToIssue(owner, name, issueNumber, labels.ToArray());
+    }
+
+    private async Task EnsureLabelExistsAsync(string owner, string name, string label, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _client.Issue.Labels.Get(owner, name, label);
+        }
+        catch (ApiException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            await _client.Issue.Labels.Create(owner, name, new NewLabel(label, "ededed"));
+        }
+    }
+
     private static RepositoryDto MapToDto(Repository repository) => new(
         repository.Id,
         repository.FullName,

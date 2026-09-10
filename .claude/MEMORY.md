@@ -8,6 +8,10 @@
 | 2026-08-24 | ABP N-Layer DDD | Convenções afonsoft | Clean Architecture pura |
 | 2026-08-24 | EF Core + SQLite | Local-first, portátil | PostgreSQL (muito pesado) |
 | 2026-08-24 | Minimal APIs | Simplicidade e performance | Controllers tradicionais |
+| 2026-09-10 | Kanban GitHub via labels (Octokit + MudBlazor) | Sem estado extra; GitHub como fonte da verdade | GitHub Projects API (GraphQL) |
+| 2026-09-10 | Orquestração de agentes CLI: `BackgroundService` + `Channel<T>` + SignalR | Não bloquear threads da UI; streaming por grupo `issueId` | Polling HTTP; `IHostedService` com fila própria |
+| 2026-09-10 | `IAgentLogBroadcaster` em Application.Contracts, implementado no Server | Evitar dependência `Integrations → Server` | Referenciar `IHubContext` direto em Integrations |
+| 2026-09-10 | Skills `afonsoft/skills` instaladas em `.claude/skills` e `.devin/skills` (cópia, `skills-lock.json`) | Plataformas declaradas em CLAUDE.md; evitar 50+ pastas de IDEs | `npx skills add --all` sem filtro |
 
 ## Débitos Técnicos
 

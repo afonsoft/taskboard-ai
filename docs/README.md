@@ -34,6 +34,8 @@ See [`README.md`](../README.md) (en-us default) or [`README.pt-br.md`](../README
 
 ## References
 
+- [installation.md](./installation.md) — Installation guide (en-us)
+- [installation.pt-br.md](./installation.pt-br.md) — Guia de instalação (pt-br)
 - [technologies.md](./technologies.md)
 - [packages.md](./packages.md)
 - [plugins.md](./plugins.md)

@@ -34,23 +34,15 @@ tests/
 ## Início Rápido
 
 ```bash
-# Clone
 git clone https://github.com/afonsoft/taskboard-ai.git
 cd taskboard-ai
-
-# Build
 dotnet restore Taskboard.sln
 dotnet build Taskboard.sln
-
-# Testes
 dotnet test Taskboard.sln
-
-# Executar servidor
 dotnet run --project src/Taskboard.Server
-
-# Executar CLI
-dotnet run --project src/Taskboard.Cli -- --help
 ```
+
+Veja [`docs/installation.pt-br.md`](docs/installation.pt-br.md) para setup detalhado, variáveis de ambiente e resolução de problemas.
 
 ## Integração Contínua
 

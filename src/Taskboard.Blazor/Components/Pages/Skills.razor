@@ -1,0 +1,48 @@
+@page "/skills"
+@attribute [Authorize]
+@inject TaskboardClient Client
+
+<PageTitle>Skills - Taskboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Skills</MudText>
+
+<MudTable Items="_skills" Loading="_loading" LoadingProgressColor="Color.Primary" Filter="Filter">
+    <ToolBarContent>
+        <MudText Typo="Typo.h6">Available skills</MudText>
+        <MudSpacer />
+        <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" />
+    </ToolBarContent>
+    <HeaderContent>
+        <MudTh>Name</MudTh>
+        <MudTh>Source</MudTh>
+        <MudTh>Description</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd DataLabel="Name">@context.Name</MudTd>
+        <MudTd DataLabel="Source">@context.Source</MudTd>
+        <MudTd DataLabel="Description">@context.Description</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No skills found.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private bool _loading = true;
+    private string _search = string.Empty;
+    private IReadOnlyList<SkillDto> _skills = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _skills = await Client.GetSkillsAsync();
+        _loading = false;
+    }
+
+    private bool Filter(SkillDto skill)
+    {
+        return string.IsNullOrWhiteSpace(_search)
+            || skill.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || skill.Description.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || skill.Source.Contains(_search, StringComparison.OrdinalIgnoreCase);
+    }
+}

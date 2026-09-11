@@ -1,7 +1,8 @@
 @inherits LayoutComponentBase
 @inject IHttpContextAccessor HttpContextAccessor
+@inject TaskboardClient Client
 
-<MudThemeProvider />
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -12,11 +13,15 @@
 
     <main>
         <div class="top-row px-4">
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)"
+                           Color="Color.Inherit"
+                           Href="/settings"
+                           aria-label="settings" />
             <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
             @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
             {
                 <form method="post" action="/api/logout" class="logout-form">
-                    <button type="submit">Log out</button>
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit">Log out</MudButton>
                 </form>
             }
         </div>
@@ -26,3 +31,20 @@
         </article>
     </main>
 </div>
+
+@code {
+    private bool _isDarkMode = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Client.GetSettingsAsync();
+            _isDarkMode = settings.Theme != "light";
+        }
+        catch
+        {
+            _isDarkMode = true;
+        }
+    }
+}

@@ -23,6 +23,8 @@ public sealed class TaskboardDbContext : DbContext
     public DbSet<AiChatThread> AiChatThreads => Set<AiChatThread>();
     public DbSet<AiChatRun> AiChatRuns => Set<AiChatRun>();
     public DbSet<AiChatEvent> AiChatEvents => Set<AiChatEvent>();
+    public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
+    public DbSet<AgentPreference> AgentPreferences => Set<AgentPreference>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

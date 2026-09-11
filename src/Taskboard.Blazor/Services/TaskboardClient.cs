@@ -1,5 +1,8 @@
 using System.Net.Http.Json;
+using Taskboard.Application.Contracts.Settings;
+using Taskboard.Application.Contracts.Skills;
 using Taskboard.Dtos;
+using Taskboard.Requests;
 
 namespace Taskboard.Blazor.Services;
 
@@ -45,6 +48,26 @@ public sealed class TaskboardClient
         return response?.Threads ?? [];
     }
 
+    public async Task<SettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<SettingsResponse>("/api/settings", cancellationToken);
+        return response?.Settings ?? new SettingsDto("dark", null, []);
+    }
+
+    public async Task SaveSettingsAsync(SaveSettingsRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync("/api/settings", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task<IReadOnlyList<SkillDto>> GetSkillsAsync(CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetFromJsonAsync<SkillsResponse>("/api/skills", cancellationToken);
+        return response?.Skills ?? [];
+    }
+
     private sealed record ProjectListResponse(List<ProjectDto> Projects);
     private sealed record AiChatThreadListResponse(List<AiChatThreadDto> Threads);
+    private sealed record SettingsResponse(SettingsDto Settings);
+    private sealed record SkillsResponse(List<SkillDto> Skills);
 }

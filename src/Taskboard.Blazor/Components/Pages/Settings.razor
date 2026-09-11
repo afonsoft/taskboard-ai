@@ -1,0 +1,90 @@
+@page "/settings"
+@attribute [Authorize]
+@inject TaskboardClient Client
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Settings - Taskboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+
+<MudCard>
+    <MudCardContent>
+        <MudForm>
+            <MudSwitch T="bool" Value="_isDark" ValueChanged="OnThemeChanged" Label="Dark mode" Color="Color.Primary" />
+            <MudTextField T="string" @bind-Value="_gitHubToken" Label="GitHub token" InputType="InputType.Password" Class="mt-2" />
+        </MudForm>
+    </MudCardContent>
+</MudCard>
+
+<MudCard Class="mt-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Agents</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudTable Items="_agents" Breakpoint="Breakpoint.Sm" Loading="_loading" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Version</MudTh>
+                <MudTh>Enabled</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Version">@context.Version</MudTd>
+                <MudTd DataLabel="Enabled">
+                    <MudSwitch T="bool" Value="_enabled.Contains(context.Type)" ValueChanged="v => ToggleAgent(context.Type, v)" Color="Color.Primary" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No agents discovered.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudCardContent>
+</MudCard>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save</MudButton>
+
+@code {
+    private bool _isDark = true;
+    private bool _loading = true;
+    private string? _gitHubToken;
+    private IReadOnlyList<AgentPreferenceDto> _agents = [];
+    private HashSet<AgentType> _enabled = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var settings = await Client.GetSettingsAsync();
+        _isDark = settings.Theme != "light";
+        _gitHubToken = settings.GitHubToken;
+        _agents = settings.Agents;
+        _enabled = new HashSet<AgentType>(settings.Agents.Where(a => a.Enabled).Select(a => a.Type));
+        _loading = false;
+    }
+
+    private void OnThemeChanged(bool value) => _isDark = value;
+
+    private void ToggleAgent(AgentType type, bool enabled)
+    {
+        if (enabled)
+        {
+            _enabled.Add(type);
+        }
+        else
+        {
+            _enabled.Remove(type);
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        var request = new SaveSettingsRequest(
+            _isDark ? "dark" : "light",
+            _gitHubToken,
+            _enabled.Select(a => a.ToString()).ToList().AsReadOnly());
+        await Client.SaveSettingsAsync(request);
+        Snackbar.Add("Settings saved", Severity.Success);
+        Navigation.NavigateTo("/settings", forceLoad: true);
+    }
+}

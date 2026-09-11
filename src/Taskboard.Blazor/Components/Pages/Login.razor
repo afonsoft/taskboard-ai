@@ -1,17 +1,36 @@
 @page "/login"
 
-<div class="login-container">
-    <h1>Taskboard</h1>
-    <form method="post" action="/api/login" class="login-form">
-        <label>
-            Username
-            <input type="text" name="Username" required autofocus />
-        </label>
-        <label>
-            Password
-            <input type="password" name="Password" required />
-        </label>
-        <input type="hidden" name="ReturnUrl" value="/" />
-        <button type="submit">Sign in</button>
-    </form>
+<PageTitle>Login - Taskboard</PageTitle>
+
+<div class="d-flex align-center justify-center mud-height-full" style="min-height: 70vh;">
+    <MudCard Elevation="4" Style="width: 360px;">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h4" Align="Align.Center">Taskboard</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <form method="post" action="/api/login" class="d-flex flex-column gap-4">
+                <MudTextField T="string" 
+                              Label="Username" 
+                              name="Username" 
+                              Required="true" 
+                              AutoFocus="true" 
+                              Variant="Variant.Outlined" />
+                <MudTextField T="string" 
+                              Label="Password" 
+                              name="Password" 
+                              InputType="InputType.Password" 
+                              Required="true" 
+                              Variant="Variant.Outlined" />
+                <input type="hidden" name="ReturnUrl" value="/" />
+                <MudButton ButtonType="ButtonType.Submit" 
+                           Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           FullWidth="true">
+                    Sign in
+                </MudButton>
+            </form>
+        </MudCardContent>
+    </MudCard>
 </div>

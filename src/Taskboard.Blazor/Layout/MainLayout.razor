@@ -64,11 +64,18 @@
         {
             var settings = await Client.GetSettingsAsync();
             _isDarkMode = settings.Theme != "light";
-            await ApplyThemeAsync();
         }
-        catch (HttpRequestException)
+        catch (Exception)
         {
             _isDarkMode = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ApplyThemeAsync();
         }
     }
 

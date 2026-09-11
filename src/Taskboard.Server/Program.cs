@@ -40,8 +40,16 @@ using TaskStatus = Taskboard.ValueObjects.TaskStatus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var serverUrls = TaskboardEnvironment.GetServerUrls();
+var environment = new TaskboardEnvironment(builder.Configuration, builder.Environment);
+var serverUrls = environment.GetServerUrls();
 builder.WebHost.UseUrls(serverUrls);
+
+builder.Services.AddOptions<TaskboardOptions>()
+    .BindConfiguration("Taskboard")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<AdminOptions>()
+    .BindConfiguration("Admin");
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -104,10 +112,10 @@ builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddResponseCompression();
 
-var adminDataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
+var adminDataDir = environment.GetDataDir();
 builder.Services.AddSingleton(AdminUser.CreateFromConfiguration(builder.Configuration, adminDataDir));
 
-var dataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
+var dataDir = environment.GetDataDir();
 Directory.CreateDirectory(dataDir);
 var connectionString = $"Data Source={Path.Combine(dataDir, "taskboard.sqlite")}";
 

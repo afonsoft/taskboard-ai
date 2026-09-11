@@ -10,9 +10,11 @@ namespace Taskboard.Tests.Integration;
 public class ServerEndpointsTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
+    private readonly WebApplicationFactory<Program> _factory;
 
     public ServerEndpointsTests(WebApplicationFactory<Program> factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -130,5 +132,18 @@ public class ServerEndpointsTests : IClassFixture<WebApplicationFactory<Program>
         commentObj.ShouldNotBeNull();
         var body = commentObj!["body"]?.GetValue<string>();
         body.ShouldBe("Test comment from integration test");
+    }
+
+    [Fact]
+    public async Task Dado_RequisicaoComAcceptEncodingGzip_Quando_GetProjects_Entao_RetornaConteudoComprimido()
+    {
+        // Covers FR-006: response compression for dynamic responses
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("Accept-Encoding", "gzip");
+
+        var response = await client.GetAsync("/api/projects");
+
+        response.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+        response.Content.Headers.ContentEncoding.ShouldContain("gzip");
     }
 }

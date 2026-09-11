@@ -14,18 +14,20 @@ else
         {
             <div class="column">
                 <h3>@status</h3>
-                @foreach (var task in GetTasks(status))
-                {
-                    <TaskCard Task="task" />
-                }
+                <div style="height: 600px; overflow-y: auto;">
+                    <Virtualize Items="GetTasks(status).ToList()" ItemSize="80" OverscanCount="5">
+                        <TaskCard Task="context" @key="context.Id" />
+                    </Virtualize>
+                </div>
             </div>
         }
         <div class="column">
             <h3>archived</h3>
-            @foreach (var task in _tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder))
-            {
-                <TaskCard Task="task" />
-            }
+            <div style="height: 600px; overflow-y: auto;">
+                <Virtualize Items="_tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).ToList()" ItemSize="80" OverscanCount="5">
+                    <TaskCard Task="context" @key="context.Id" />
+                </Virtualize>
+            </div>
         </div>
     </div>
 }

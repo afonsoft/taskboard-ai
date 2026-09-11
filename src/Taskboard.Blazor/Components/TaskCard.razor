@@ -9,4 +9,21 @@
 @code {
     [Parameter]
     public TaskDto Task { get; set; } = default!;
+
+    private TaskDto? _previousTask;
+
+    public override Task SetParametersAsync(ParameterView parameters)
+    {
+        if (parameters.TryGetValue<TaskDto>(nameof(Task), out _))
+        {
+            _previousTask = Task;
+        }
+
+        return base.SetParametersAsync(parameters);
+    }
+
+    protected override bool ShouldRender()
+    {
+        return _previousTask is null || !Task.Equals(_previousTask);
+    }
 }

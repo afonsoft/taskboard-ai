@@ -102,6 +102,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddResponseCompression();
 
 var adminDataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
 builder.Services.AddSingleton(AdminUser.CreateFromConfiguration(builder.Configuration, adminDataDir));
@@ -124,6 +125,7 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseCors("Dev");
+app.UseResponseCompression();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

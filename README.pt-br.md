@@ -132,7 +132,8 @@ Veja [`.specs/CAPABILITY-MAP.md`](.specs/CAPABILITY-MAP.md).
 - [`CLAUDE.md`](CLAUDE.md) — Fonte única de verdade para agentes
 - [`.claude/`](.claude/) — Harness para Claude Code / Devin CLI
 - [`.devin/config.json`](.devin/config.json) — Configuração do Devin CLI
-- [`.agent/skills/`](.agent/skills/) — Skills para Google Antigravity
+- [`.agent/skills/`](.agent/skills/) — Skills para Google Antigravity (symlink para `.claude/skills/`)
+- [`.claude/memory/orchestrator_stats.md`](.claude/memory/orchestrator_stats.md) — Estado da sessão do orquestrador
 
 O harness de agentes usa skills do [`afonsoft/skills`](https://github.com/afonsoft/skills):
 
@@ -140,7 +141,7 @@ O harness de agentes usa skills do [`afonsoft/skills`](https://github.com/afonso
 npx skills add afonsoft/skills
 ```
 
-O comando instala skills em `.claude/skills` e `.devin/skills`; o arquivo `skills-lock.json` registra as fontes fixadas.
+O comando instala skills em `.claude/skills/`; o arquivo `skills-lock.json` registra as fontes fixadas.
 
 ## Contribuição
 

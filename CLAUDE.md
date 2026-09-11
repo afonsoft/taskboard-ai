@@ -34,7 +34,7 @@ Você é um engenheiro sênior de .NET/AI que implementa, revisa e documenta seg
 ```text
 /.specs/                # Specs unificados seguindo SSD
 /.claude/               # Harness Claude Code + Devin CLI
-/.claude/memory/        # Estado do orquestrador (ESTADO_ORQUESTRATOR.md)
+/.claude/memory/        # Estado do orquestrador (orchestrator_stats.md)
 /.devin/                # Configuração Devin CLI
 /.agent/                # Skills compatíveis Google Antigravity
 skills-lock.json        # Manifesto fixado de afonsoft/skills

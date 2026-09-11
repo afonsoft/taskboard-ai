@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using Shouldly;
 using Taskboard.Agents;
@@ -35,6 +36,10 @@ public class AgentOrchestrationServiceTests
         var request = CriarRequest();
 
         await service.EnqueueAsync(request);
+
+        await AguardarAsync(async () =>
+            logRepository.ReceivedCalls().Any(call =>
+                call.GetMethodInfo().Name == nameof(IAgentLogRepository.AppendAsync)));
 
         await logRepository.Received(1).AppendAsync(
             Arg.Is<AgentLogMessage>(log => log.IssueId == request.IssueId && log.Stream == AgentLogStream.System),
@@ -188,12 +193,19 @@ public class AgentOrchestrationServiceTests
         IAgentLogBroadcaster? logBroadcaster = null,
         IAgentLogRepository? agentLogRepository = null,
         IGitHubService? gitHubService = null)
-        => new(
+    {
+        var repository = agentLogRepository ?? Substitute.For<IAgentLogRepository>();
+        var services = new ServiceCollection();
+        services.AddScoped(_ => repository);
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+
+        return new(
             acpClient ?? Substitute.For<IAgentAcpClient>(),
             discoveryService ?? Substitute.For<IAgentDiscoveryService>(),
             logBroadcaster ?? Substitute.For<IAgentLogBroadcaster>(),
-            agentLogRepository ?? Substitute.For<IAgentLogRepository>(),
+            scopeFactory,
             gitHubService ?? Substitute.For<IGitHubService>());
+    }
 
     private static AgentExecutionRequest CriarRequest()
         => new(

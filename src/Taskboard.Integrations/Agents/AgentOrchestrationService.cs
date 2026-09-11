@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Taskboard.Agents;
 using Taskboard.GitHub;
@@ -14,7 +15,7 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
     private readonly IAgentAcpClient _acpClient;
     private readonly IAgentDiscoveryService _discoveryService;
     private readonly IAgentLogBroadcaster _logBroadcaster;
-    private readonly IAgentLogRepository _agentLogRepository;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
     private readonly IGitHubService _gitHubService;
     private readonly Channel<AgentExecutionRequest> _channel = Channel.CreateUnbounded<AgentExecutionRequest>();
     private readonly ConcurrentDictionary<string, RunningJob> _running = new();
@@ -24,13 +25,13 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
         IAgentAcpClient acpClient,
         IAgentDiscoveryService discoveryService,
         IAgentLogBroadcaster logBroadcaster,
-        IAgentLogRepository agentLogRepository,
+        IServiceScopeFactory serviceScopeFactory,
         IGitHubService gitHubService)
     {
         _acpClient = acpClient;
         _discoveryService = discoveryService;
         _logBroadcaster = logBroadcaster;
-        _agentLogRepository = agentLogRepository;
+        _serviceScopeFactory = serviceScopeFactory;
         _gitHubService = gitHubService;
     }
 
@@ -79,7 +80,9 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
             }
         }
 
-        return await _agentLogRepository.GetByIssueIdAsync(issueId, cancellationToken);
+        await using var scope = _serviceScopeFactory.CreateAsyncScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IAgentLogRepository>();
+        return await repository.GetByIssueIdAsync(issueId, cancellationToken);
     }
 
     public Task CancelAsync(string issueId, CancellationToken cancellationToken = default)
@@ -162,8 +165,13 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
             list.Add(message);
         }
 
-        _ = _agentLogRepository.AppendAsync(message);
         _ = _logBroadcaster.BroadcastAsync(message);
+        _ = Task.Run(async () =>
+        {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IAgentLogRepository>();
+            await repository.AppendAsync(message);
+        });
     }
 
     private sealed class RunningJob

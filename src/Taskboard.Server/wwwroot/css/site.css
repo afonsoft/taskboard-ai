@@ -645,6 +645,141 @@ body {
     .settings-page {
         padding-bottom: 5rem;
     }
+
+    .filter-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        background-color: var(--color-surface);
+        color: var(--color-text);
+        border: 1px solid var(--color-border);
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .filter-chip:hover {
+        background-color: var(--color-surface-elevated);
+    }
+
+    .filter-chip-active {
+        background-color: var(--color-primary);
+        color: #fff;
+        border-color: var(--color-primary);
+    }
+
+    .filter-chip-active:hover {
+        background-color: var(--color-primary-600);
+    }
+
+    .skill-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    @media (min-width: 640px) {
+        .skill-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .skill-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    .skill-card {
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        transition: background-color 0.15s ease, box-shadow 0.15s ease;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .skill-card:hover,
+    .skill-card:focus {
+        background-color: var(--color-surface-elevated);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        outline: none;
+    }
+
+    .skill-card-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .skill-card-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--color-text);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin: 0;
+    }
+
+    .skill-card-description {
+        font-size: 0.875rem;
+        color: var(--color-text-muted);
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin: 0;
+        flex: 1;
+    }
+
+    .skill-card-path {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        font-family: 'Courier New', Courier, monospace;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        margin: 0;
+    }
+
+    .source-badge {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 9999px;
+        padding: 0.15rem 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+        flex-shrink: 0;
+    }
+
+    .source-badge-claude { background-color: #e9d5ff; color: #6b21a8; }
+    .source-badge-devin { background-color: #c7d2fe; color: #3730a3; }
+    .source-badge-cursor { background-color: #fed7aa; color: #9a3412; }
+    .source-badge-opencode { background-color: #bbf7d0; color: #166534; }
+    .source-badge-taskboard { background-color: rgba(119, 107, 231, 0.15); color: var(--color-primary-600); }
+    .source-badge-unknown { background-color: var(--color-surface-elevated); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+
+    [data-theme="dark"] .source-badge-claude { background-color: #4a3058; color: #e9d5ff; }
+    [data-theme="dark"] .source-badge-devin { background-color: #2e3655; color: #c7d2fe; }
+    [data-theme="dark"] .source-badge-cursor { background-color: #522e1a; color: #fed7aa; }
+    [data-theme="dark"] .source-badge-opencode { background-color: #143d28; color: #bbf7d0; }
+    [data-theme="dark"] .source-badge-taskboard { background-color: rgba(119, 107, 231, 0.15); color: #a69cf3; }
+    [data-theme="dark"] .source-badge-unknown { background-color: var(--color-surface-elevated); color: var(--color-text-muted); }
 }
 
 @media (prefers-reduced-motion: reduce) {

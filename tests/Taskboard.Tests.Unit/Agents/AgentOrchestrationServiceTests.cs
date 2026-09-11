@@ -69,7 +69,7 @@ public class AgentOrchestrationServiceTests
     public async Task Dado_AgentesDescobertos_Quando_ConsultarDisponibilidade_Entao_MapeiaResultadoSemAlterarStatus()
     {
         var discoveryService = Substitute.For<IAgentDiscoveryService>();
-        var expected = new AgentInfo("claude", "/usr/bin/claude", AgentType.Claude, AgentStatus.Available, "claude 1.2.3");
+        var expected = new AgentInfo("claude", "/usr/bin/claude", AgentType.Claude, AgentStatus.Available, "claude 1.2.3", null);
         discoveryService.DiscoverAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AgentInfo>>([expected]));
         var service = CriarService(discoveryService: discoveryService);

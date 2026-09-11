@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 
@@ -125,7 +126,12 @@ public sealed class AdminUser
     public void Save(string path)
     {
         var data = new AdminData(Username, PasswordHash);
-        var json = JsonSerializer.Serialize(data, new JsonSerializerOptions { WriteIndented = true });
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+        var json = JsonSerializer.Serialize(data, options);
         File.WriteAllText(path, json);
 
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())

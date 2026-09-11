@@ -8,4 +8,5 @@ public sealed record AgentInfo(
     string ExecutablePath,
     AgentType Type,
     AgentStatus Status,
-    string? Version);
+    string? Version,
+    string? Description);

@@ -6,118 +6,159 @@
 
 <PageTitle>Settings - Taskboard</PageTitle>
 
-<h1 class="mb-2 text-2xl font-bold text-text">Settings</h1>
-<p class="mb-6 text-sm text-text-muted">Customize your workspace and agents</p>
+<div class="settings-page">
+    <h1 class="mb-2 text-2xl font-bold text-text">Settings</h1>
+    <p class="mb-6 text-sm text-text-muted">Customize your workspace and agents</p>
 
-<div class="card mb-6">
-    <h2 class="mb-4 text-lg font-semibold text-text">Preferences</h2>
-    <div class="space-y-4">
-        <label class="flex items-center gap-3">
-            <input type="checkbox" class="checkbox" @bind="_isDark" />
-            <span class="text-sm text-text">Dark mode</span>
-        </label>
-        <div>
-            <label for="github-token" class="mb-1 block text-sm font-medium text-text">GitHub token</label>
-            <input id="github-token" type="password" class="input" @bind="_gitHubToken" placeholder="ghp_***" />
-        </div>
-    </div>
-</div>
-
-<div class="card mb-6">
-    <h2 class="mb-4 text-lg font-semibold text-text">Change password</h2>
-    <div class="space-y-4">
-        <div>
-            <label for="current-password" class="mb-1 block text-sm font-medium text-text">Current password</label>
-            <input id="current-password" type="password" class="input" @bind="_currentPassword" />
-        </div>
-        <div>
-            <label for="new-password" class="mb-1 block text-sm font-medium text-text">New password</label>
-            <input id="new-password" type="password" class="input" @bind="_newPassword" />
-        </div>
-        <div>
-            <label for="confirm-password" class="mb-1 block text-sm font-medium text-text">Confirm new password</label>
-            <input id="confirm-password" type="password" class="input" @bind="_confirmPassword" />
-        </div>
-        @if (!string.IsNullOrWhiteSpace(_passwordError))
-        {
-            <p class="text-sm text-danger">@_passwordError</p>
-        }
-        <button type="button" class="btn-secondary" @onclick="ChangePasswordAsync">Change password</button>
-    </div>
-</div>
-
-<div class="card mb-6">
-    <h2 class="mb-4 text-lg font-semibold text-text">Agents</h2>
-    @if (_loading)
+    @if (_isLoading)
     {
-        <Loading Message="Loading agents..." />
+        <Loading Message="Loading settings..." />
     }
-    else if (!_agents.Any())
+    else if (_errorMessage is not null)
     {
-        <EmptyState Message="No agents discovered." />
+        <div class="alert mb-6">@_errorMessage</div>
     }
     else
     {
-        <div class="overflow-x-auto">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Version</th>
-                        <th>Enabled</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var agent in _agents)
-                    {
-                        <tr>
-                            <td>@agent.Name</td>
-                            <td class="text-text-muted">@agent.Version</td>
-                            <td>
-                                <input type="checkbox" class="checkbox" checked="@_enabled.Contains(agent.Type)" @onchange="e => ToggleAgent(agent.Type, (bool)e.Value!)" />
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="card p-4 md:p-6">
+            <div class="form-section">
+                <h2 class="form-section-title">Appearance</h2>
+                <label class="form-label" for="theme-toggle">Theme</label>
+                <div class="setting-row">
+                    <div>
+                        <div class="text-text">Dark mode</div>
+                        <p class="form-helper">Use the dark color theme across the app.</p>
+                    </div>
+                    <input id="theme-toggle" type="checkbox" class="toggle" @bind="_isDark" />
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h2 class="form-section-title">Integrations</h2>
+                <label class="form-label" for="github-token">GitHub token</label>
+                <p class="form-helper">Paste a personal access token with repo scope.</p>
+                <div class="setting-row-input">
+                    <input id="github-token" type="@_tokenInputType" class="input" @bind="_gitHubToken" placeholder="ghp_…" />
+                    <button type="button" class="btn-secondary whitespace-nowrap" @onclick="ToggleTokenVisibility">@_tokenToggleLabel</button>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h2 class="form-section-title">Security</h2>
+                <label class="form-label" for="current-password">Change password</label>
+                <div class="grid gap-4 mt-3 md:grid-cols-3">
+                    <input id="current-password" type="password" class="input" @bind="_currentPassword" placeholder="Current password" />
+                    <input type="password" class="input" @bind="_newPassword" placeholder="New password" />
+                    <input type="password" class="input" @bind="_confirmPassword" placeholder="Confirm new password" />
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_passwordError))
+                {
+                    <p class="mt-2 text-sm text-danger">@_passwordError</p>
+                }
+                <div class="mt-4">
+                    <button type="button" class="btn-secondary" @onclick="ChangePasswordAsync">Change password</button>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h2 class="form-section-title">Agents</h2>
+                @if (!_agents.Any())
+                {
+                    <EmptyState Message="No agents discovered." />
+                }
+                else
+                {
+                    <div>
+                        @foreach (var agent in _agents)
+                        {
+                            <div class="setting-row" @key="agent.Type">
+                                <div>
+                                    <div class="text-text font-medium">@agent.Name</div>
+                                    @if (!string.IsNullOrWhiteSpace(agent.Description))
+                                    {
+                                        <div class="text-text-muted text-sm">@agent.Description</div>
+                                    }
+                                    <div class="text-text-muted text-xs">@agent.Type@(string.IsNullOrWhiteSpace(agent.Version) ? "" : $" · v{agent.Version}")</div>
+                                </div>
+                                <input type="checkbox" class="toggle" checked="@_enabledState[agent.Type]" @onchange="e => ToggleAgent(agent.Type, (bool)e.Value!)" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="action-bar">
+                <button type="button" class="btn-secondary" @onclick="ResetAsync">Reset</button>
+                <button type="button" class="btn-primary" @onclick="SaveAsync">Save changes</button>
+            </div>
         </div>
     }
 </div>
 
-<button type="button" class="btn-primary" @onclick="SaveAsync">Save settings</button>
-
 @code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
     private bool _isDark = true;
-    private bool _loading = true;
+    private bool _originalIsDark = true;
     private string? _gitHubToken;
+    private string? _originalGitHubToken;
     private IReadOnlyList<AgentPreferenceDto> _agents = [];
-    private HashSet<AgentType> _enabled = new();
+    private readonly Dictionary<AgentType, bool> _enabledState = new();
+    private readonly Dictionary<AgentType, bool> _originalEnabledState = new();
 
     private string _currentPassword = string.Empty;
     private string _newPassword = string.Empty;
     private string _confirmPassword = string.Empty;
     private string? _passwordError;
 
+    private string _tokenInputType = "password";
+    private string _tokenToggleLabel = "Show";
+
     protected override async Task OnInitializedAsync()
     {
-        var settings = await Client.GetSettingsAsync();
-        _isDark = settings.Theme != "light";
-        _gitHubToken = settings.GitHubToken;
-        _agents = settings.Agents;
-        _enabled = new HashSet<AgentType>(settings.Agents.Where(a => a.Enabled).Select(a => a.Type));
-        _loading = false;
+        try
+        {
+            var settings = await Client.GetSettingsAsync();
+            _isDark = settings.Theme != "light";
+            _originalIsDark = _isDark;
+            _gitHubToken = settings.GitHubToken;
+            _originalGitHubToken = _gitHubToken;
+            _agents = settings.Agents;
+            _enabledState.Clear();
+            _originalEnabledState.Clear();
+            foreach (var agent in _agents)
+            {
+                _enabledState[agent.Type] = agent.Enabled;
+                _originalEnabledState[agent.Type] = agent.Enabled;
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading settings: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ToggleTokenVisibility()
+    {
+        if (_tokenInputType == "password")
+        {
+            _tokenInputType = "text";
+            _tokenToggleLabel = "Hide";
+        }
+        else
+        {
+            _tokenInputType = "password";
+            _tokenToggleLabel = "Show";
+        }
     }
 
     private void ToggleAgent(AgentType type, bool enabled)
     {
-        if (enabled)
-        {
-            _enabled.Add(type);
-        }
-        else
-        {
-            _enabled.Remove(type);
-        }
+        _enabledState[type] = enabled;
     }
 
     private async Task ChangePasswordAsync()
@@ -148,12 +189,24 @@
         }
     }
 
+    private void ResetAsync()
+    {
+        _isDark = _originalIsDark;
+        _gitHubToken = _originalGitHubToken;
+        foreach (var (type, value) in _originalEnabledState)
+        {
+            _enabledState[type] = value;
+        }
+        _passwordError = null;
+        Snackbar.Add("Settings reset", Severity.Info);
+    }
+
     private async Task SaveAsync()
     {
         var request = new SaveSettingsRequest(
             _isDark ? "dark" : "light",
             _gitHubToken,
-            _enabled.Select(a => a.ToString()).ToList().AsReadOnly());
+            _enabledState.Where(kv => kv.Value).Select(kv => kv.Key.ToString()).ToList().AsReadOnly());
         await Client.SaveSettingsAsync(request);
         Snackbar.Add("Settings saved", Severity.Success);
         Navigation.NavigateTo("/settings", forceLoad: true);

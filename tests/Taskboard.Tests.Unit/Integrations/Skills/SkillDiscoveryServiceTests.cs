@@ -13,11 +13,11 @@ public class SkillDiscoveryServiceTests
     [Fact]
     public async Task Dado_DiretorioComSkill_Quando_Descobrir_Entao_RetornaSkillComNomeEDescricao()
     {
-        var temp = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
-        var skillDir = Path.Combine(temp, "manage-taskboard");
+        var temp = Path.Join(Path.GetTempPath(), Guid.NewGuid().ToString());
+        var skillDir = Path.Join(temp, "manage-taskboard");
         Directory.CreateDirectory(skillDir);
         await File.WriteAllTextAsync(
-            Path.Combine(skillDir, "SKILL.md"),
+            Path.Join(skillDir, "SKILL.md"),
             "---\nname: manage-taskboard\ndescription: Gerencia o taskboard.\n---\n");
 
         var service = new SkillDiscoveryService([new SkillDiscoverySource("custom", temp)]);

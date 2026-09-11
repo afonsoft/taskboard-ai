@@ -34,27 +34,28 @@ else if (_columns is not null)
                     <h4>@column.Column (@column.Issues.Count)</h4>
                     <span class="kanban-label">@column.Label</span>
                 </div>
-                <div class="kanban-column-body">
-                    @foreach (var issue in column.Issues)
-                    {
+                <div class="kanban-column-body" style="height: 600px; overflow-y: auto;">
+                    <Virtualize Items="column.Issues.ToList()" ItemSize="120" OverscanCount="3">
                         <div class="kanban-card"
+                             @key="context.Id"
                              draggable="true"
-                             @ondragstart="() => OnDragStart(issue, column.Column)"
-                             @onclick="() => OpenTaskDetailAsync(issue)">
-                            <div class="kanban-card-title">@issue.Title</div>
+                             aria-label="@context.Title, drag to move"
+                             @ondragstart="() => OnDragStart(context, column.Column)"
+                             @onclick="() => OpenTaskDetailAsync(context)">
+                            <div class="kanban-card-title">@context.Title</div>
                             <div class="kanban-card-meta">
-                                <span>#@issue.Number</span>
-                                @if (!string.IsNullOrWhiteSpace(issue.AssigneeLogin))
+                                <span>#@context.Number</span>
+                                @if (!string.IsNullOrWhiteSpace(context.AssigneeLogin))
                                 {
-                                    <span title="@issue.AssigneeLogin">@@@issue.AssigneeLogin</span>
+                                    <span title="@context.AssigneeLogin">@@@context.AssigneeLogin</span>
                                 }
                             </div>
-                            @if (!string.IsNullOrWhiteSpace(issue.Body))
+                            @if (!string.IsNullOrWhiteSpace(context.Body))
                             {
-                                <div class="kanban-card-body">@issue.Body</div>
+                                <div class="kanban-card-body">@context.Body</div>
                             }
                         </div>
-                    }
+                    </Virtualize>
                 </div>
             </div>
         }
@@ -67,14 +68,16 @@ else if (_columns is not null)
 
     private bool _isLoading;
     private string? _errorMessage;
+    private string? _currentRepository;
     private IReadOnlyList<BoardColumnDto>? _columns;
     private IssueDto? _draggedIssue;
     private GitHubBoardColumn? _draggedFromColumn;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (!string.IsNullOrWhiteSpace(RepositoryFullName))
+        if (!string.IsNullOrWhiteSpace(RepositoryFullName) && RepositoryFullName != _currentRepository)
         {
+            _currentRepository = RepositoryFullName;
             await LoadIssuesAsync();
         }
     }

@@ -3,9 +3,17 @@
 
 <h1>Board</h1>
 
-@if (_project is null)
+@if (_isLoading)
 {
-    <p><em>Loading project...</em></p>
+    <Loading Message="Loading project..." />
+}
+else if (_errorMessage is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+}
+else if (_project is null)
+{
+    <EmptyState Message="No project found." />
 }
 else
 {
@@ -15,37 +23,67 @@ else
             <div class="column">
                 <h3>@status</h3>
                 <div style="height: 600px; overflow-y: auto;">
-                    <Virtualize Items="GetTasks(status).ToList()" ItemSize="80" OverscanCount="5">
-                        <TaskCard Task="context" @key="context.Id" />
-                    </Virtualize>
+                    @if (GetTasks(status).Any())
+                    {
+                        <Virtualize Items="GetTasks(status).ToList()" ItemSize="80" OverscanCount="5">
+                            <TaskCard Task="context" @key="context.Id" />
+                        </Virtualize>
+                    }
+                    else
+                    {
+                        <EmptyState Message="No tasks" />
+                    }
                 </div>
             </div>
         }
         <div class="column">
             <h3>archived</h3>
             <div style="height: 600px; overflow-y: auto;">
-                <Virtualize Items="_tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).ToList()" ItemSize="80" OverscanCount="5">
-                    <TaskCard Task="context" @key="context.Id" />
-                </Virtualize>
+                @{
+                    var archived = _tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).ToList();
+                }
+                @if (archived.Any())
+                {
+                    <Virtualize Items="archived" ItemSize="80" OverscanCount="5">
+                        <TaskCard Task="context" @key="context.Id" />
+                    </Virtualize>
+                }
+                else
+                {
+                    <EmptyState Message="No archived tasks" />
+                }
             </div>
         </div>
     </div>
 }
 
 @code {
+    private bool _isLoading = true;
+    private string? _errorMessage;
     private ProjectDto? _project;
     private List<TaskDto> _tasks = [];
     private readonly string[] _statuses = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "canceled"];
 
     protected override async Task OnInitializedAsync()
     {
-        var projects = await Client.GetProjectsAsync();
-        _project = projects.FirstOrDefault();
-
-        if (_project is not null)
+        try
         {
-            var tasks = await Client.GetTasksAsync(_project.Id);
-            _tasks = tasks.ToList();
+            var projects = await Client.GetProjectsAsync();
+            _project = projects.FirstOrDefault();
+
+            if (_project is not null)
+            {
+                var tasks = await Client.GetTasksAsync(_project.Id);
+                _tasks = tasks.ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Error loading board: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
         }
     }
 

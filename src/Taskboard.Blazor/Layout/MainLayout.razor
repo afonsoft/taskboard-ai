@@ -1,7 +1,7 @@
 @inherits LayoutComponentBase
 @inject IHttpContextAccessor HttpContextAccessor
 
-<MudThemeProvider />
+<MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
@@ -12,17 +12,38 @@
 
     <main>
         <div class="top-row px-4">
+            <MudIconButton
+                Icon="@(_isDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)"
+                Color="Color.Inherit"
+                aria-label="toggle theme"
+                OnClick="ToggleTheme" />
             <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
             @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
             {
-                <form method="post" action="/api/logout" class="logout-form">
+                <form method="post" action="/api/logout" class="logout-form" aria-label="logout">
                     <button type="submit">Log out</button>
                 </form>
             }
         </div>
 
         <article class="content px-4">
-            @Body
+            <ErrorBoundary>
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent>
+                    <MudAlert Severity="Severity.Error" Class="mb-4">An unexpected error occurred. Please refresh the page.</MudAlert>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>
+
+@code {
+    private bool _isDarkMode;
+
+    private void ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
+    }
+}

@@ -11,6 +11,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using MudBlazor.Services;
+using Microsoft.OpenApi.Models;
+using Swashbuckle.AspNetCore.Swagger;
+using Swashbuckle.AspNetCore.SwaggerUI;
 using Microsoft.EntityFrameworkCore;
 using Taskboard;
 using Taskboard.Application.Contracts.Configuration;
@@ -100,6 +103,16 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddSignalR();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Taskboard AI API",
+        Version = "v1",
+        Description = "API for taskboard-ai projects, tasks, agents and skills."
+    });
+});
 builder.Services.AddSingleton<IGitHubService, GitHubService>();
 builder.Services.AddSingleton<IAgentDiscoveryService, AgentDiscoveryService>();
 builder.Services.AddSingleton<ISkillDiscoveryService>(sp => new SkillDiscoveryService(new[]
@@ -108,7 +121,7 @@ builder.Services.AddSingleton<ISkillDiscoveryService>(sp => new SkillDiscoverySe
     new SkillDiscoverySource("devin", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".devin", "skills")),
     new SkillDiscoverySource("cursor", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "skills")),
     new SkillDiscoverySource("opencode", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".opencode", "skills")),
-    new SkillDiscoverySource("taskboard", Path.Join(Directory.GetCurrentDirectory(), "skills"))
+    new SkillDiscoverySource("taskboard", Path.Join(AppContext.BaseDirectory, "skills"))
 }));
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<IAgentAcpClient, JsonRpcAcpClient>();
@@ -981,6 +994,7 @@ app.Use(async (context, next) =>
         || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/img/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/assets/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/swagger", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/health", StringComparison.OrdinalIgnoreCase)
         || path.Equals("/login", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/login", StringComparison.OrdinalIgnoreCase))
@@ -1015,6 +1029,20 @@ api.MapGet("skills", async (ISkillDiscoveryService skills, CancellationToken ct)
 {
     var result = await skills.DiscoverAsync(ct);
     return Results.Ok(new { skills = result });
+});
+
+api.MapGet("skills/{source}/{name}", async (string source, string name, ISkillDiscoveryService skills, CancellationToken ct) =>
+{
+    var result = await skills.GetDetailAsync(source, name, ct);
+    return result is null ? Results.NotFound() : Results.Ok(new { skill = result });
+});
+
+app.MapSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Taskboard AI v1");
+    options.DocumentTitle = "Taskboard AI - API";
+    options.RoutePrefix = "swagger";
 });
 
 app.MapFallbackToFile("index.html");

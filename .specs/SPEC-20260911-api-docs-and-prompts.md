@@ -11,7 +11,7 @@
 | Repository | afonsoft/taskboard-ai |
 | Suggested branch | `feature/devin-20260911-api-docs-and-prompts` |
 | Technical owner | afonsoft |
-| Status | Draft |
+| Status | Approved |
 | Date | 2026-09-11 |
 | Target agent | Devin |
 

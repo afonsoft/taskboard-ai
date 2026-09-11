@@ -27,12 +27,38 @@ public class ServerEndpointsTests : IClassFixture<WebApplicationFactory<Program>
     }
 
     [Fact]
+    public async Task Given_NoAuth_When_GetSwaggerJson_Then_ReturnsOpenApi()
+    {
+        // Covers FR-001: Swagger JSON is reachable without authentication
+        var response = await _client.GetAsync("/swagger/v1/swagger.json");
+
+        response.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<JsonObject>();
+        result.ShouldNotBeNull();
+        result["openapi"].ShouldNotBeNull();
+    }
+
+    [Fact]
     public async Task Given_NoAuth_When_GetRoot_Then_Returns200OrRedirect()
     {
         var response = await _client.GetAsync("/");
 
         // Root may serve Blazor app or redirect to login
         response.StatusCode.ShouldBeOneOf(System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.Redirect);
+    }
+
+    [Fact]
+    public async Task Given_ExistingSkill_When_GetSkillDetail_Then_ReturnsSkillContent()
+    {
+        // Covers FR-003: skill detail API
+        var response = await _client.GetAsync("/api/skills/taskboard/manage-taskboard");
+
+        response.StatusCode.ShouldBe(System.Net.HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<JsonObject>();
+        result.ShouldNotBeNull();
+        result["skill"].ShouldNotBeNull();
+        var content = result["skill"]?["content"]?.GetValue<string>();
+        content.ShouldNotBeNullOrWhiteSpace();
     }
 
     [Fact]

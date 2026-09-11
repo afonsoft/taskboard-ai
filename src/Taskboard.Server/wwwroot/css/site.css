@@ -345,6 +345,20 @@ body {
     .table tr:last-child td {
         border-bottom: none;
     }
+
+    .code-block {
+        width: 100%;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        border-radius: 0.5rem;
+        border: 1px solid var(--color-border);
+        background-color: var(--color-surface-elevated);
+        padding: 1rem;
+        font-size: 0.875rem;
+        line-height: 1.5;
+        color: var(--color-text);
+    }
 }
 
 @keyframes spin {

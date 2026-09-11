@@ -66,8 +66,22 @@ public sealed class TaskboardClient
         return response?.Skills ?? [];
     }
 
+    public async Task<SkillDetailDto?> GetSkillDetailAsync(string source, string name, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.GetAsync($"/api/skills/{Uri.EscapeDataString(source)}/{Uri.EscapeDataString(name)}", cancellationToken);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<SkillDetailResponse>(cancellationToken);
+        return result?.Skill;
+    }
+
     private sealed record ProjectListResponse(List<ProjectDto> Projects);
     private sealed record AiChatThreadListResponse(List<AiChatThreadDto> Threads);
     private sealed record SettingsResponse(SettingsDto Settings);
     private sealed record SkillsResponse(List<SkillDto> Skills);
+    private sealed record SkillDetailResponse(SkillDetailDto Skill);
 }

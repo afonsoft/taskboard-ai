@@ -96,7 +96,8 @@ builder.Services.AddHttpClient<TaskboardClient>(client =>
     client.BaseAddress = new Uri(baseAddress);
 });
 
-builder.Services.AddRazorComponents();
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents();
 builder.Services.AddMudServices();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IGitHubService, GitHubService>();
@@ -205,6 +206,7 @@ app.UseExceptionHandler();
 app.UseCors("Dev");
 app.UseResponseCompression();
 app.UseRequestLocalization();
+app.UseRouting();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
@@ -283,48 +285,48 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
     Predicate = registration => registration.Tags.Contains("live")
 });
 
-api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }))
+api.MapGet("meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }))
    .CacheOutput("ReadOnlyApi");
 
-api.MapGet("/client-storage", () => Results.Ok(new { data = (string?)null }));
-api.MapPut("/client-storage", (object? _) => Results.NoContent());
+api.MapGet("client-storage", () => Results.Ok(new { data = (string?)null }));
+api.MapPut("client-storage", (object? _) => Results.NoContent());
 
-api.MapGet("/local/codex-thread-progress", () => Results.Ok(new { progress = (string?)null }));
-api.MapGet("/local/host-runtime", () => Results.Ok(new { runtime = "dotnet", version = Environment.Version.ToString() }));
-api.MapGet("/local/cloud-session", (CloudSessionService cloud) => Results.Ok(cloud.Get()));
-api.MapPut("/local/cloud-session", (UpdateCloudSessionRequest request, CloudSessionService cloud) =>
+api.MapGet("local/codex-thread-progress", () => Results.Ok(new { progress = (string?)null }));
+api.MapGet("local/host-runtime", () => Results.Ok(new { runtime = "dotnet", version = Environment.Version.ToString() }));
+api.MapGet("local/cloud-session", (CloudSessionService cloud) => Results.Ok(cloud.Get()));
+api.MapPut("local/cloud-session", (UpdateCloudSessionRequest request, CloudSessionService cloud) =>
 {
     var session = cloud.Update(request);
     return Results.Ok(session);
 });
-api.MapGet("/local/jira-connection", (IJiraService jira) => Results.Ok(jira.GetConnection()));
-api.MapPost("/local/jira-connection", async (UpdateJiraConnectionRequest request, IJiraService jira, CancellationToken ct) =>
+api.MapGet("local/jira-connection", (IJiraService jira) => Results.Ok(jira.GetConnection()));
+api.MapPost("local/jira-connection", async (UpdateJiraConnectionRequest request, IJiraService jira, CancellationToken ct) =>
 {
     jira.UpdateConnection(request);
     var connection = await jira.TestConnectionAsync(ct);
     return Results.Ok(connection);
 });
-api.MapPost("/local/jira-connection/sync", async (IJiraService jira, CancellationToken ct) =>
+api.MapPost("local/jira-connection/sync", async (IJiraService jira, CancellationToken ct) =>
 {
     var result = await jira.SyncAsync(ct);
     return Results.Ok(result);
 });
-api.MapGet("/local/ai/catalog", (AiCatalogService catalog) => Results.Ok(new { models = catalog.List() }));
-api.MapPost("/local/ai/catalog", (AiChatModelDto model, AiCatalogService catalog) =>
+api.MapGet("local/ai/catalog", (AiCatalogService catalog) => Results.Ok(new { models = catalog.List() }));
+api.MapPost("local/ai/catalog", (AiChatModelDto model, AiCatalogService catalog) =>
 {
     var added = catalog.TryAdd(model);
     return added ? Results.Created($"/api/local/ai/catalog/{model.Id}", new { model }) : Results.Conflict(new { error = new { code = "MODEL_EXISTS", message = $"Model '{model.Id}' already exists." } });
 });
-api.MapGet("/local/ai/composer/candidates", () => Results.Ok(new { candidates = Array.Empty<object>() }));
-api.MapPost("/local/ai/composer/rebind", (object? _) => Results.NoContent());
+api.MapGet("local/ai/composer/candidates", () => Results.Ok(new { candidates = Array.Empty<object>() }));
+api.MapPost("local/ai/composer/rebind", (object? _) => Results.NoContent());
 
-api.MapGet("/local/ai/threads", async (AiChatService aiChatService, CancellationToken ct) =>
+api.MapGet("local/ai/threads", async (AiChatService aiChatService, CancellationToken ct) =>
 {
     var threads = await aiChatService.ListThreadsAsync(ct);
     return Results.Ok(new { threads });
 });
 
-api.MapPost("/local/ai/threads", async (
+api.MapPost("local/ai/threads", async (
     CreateAiChatThreadRequest request,
     AiChatService aiChatService,
     CancellationToken ct) =>
@@ -333,7 +335,7 @@ api.MapPost("/local/ai/threads", async (
     return Results.Created($"/api/local/ai/threads/{thread.Id}", new { thread });
 });
 
-api.MapGet("/local/ai/threads/{id}/events", async (HttpResponse response, string id, IRepository<AiChatEvent> eventRepo, IThreadEventStreamService threadEvents, CancellationToken ct) =>
+api.MapGet("local/ai/threads/{id}/events", async (HttpResponse response, string id, IRepository<AiChatEvent> eventRepo, IThreadEventStreamService threadEvents, CancellationToken ct) =>
 {
     var threadId = AiChatThreadId.From(id);
     var existing = await eventRepo.Query.Where(e => e.ThreadId == threadId).OrderBy(e => e.CreatedAt).Select(e => e.ToDto()).ToListAsync(ct);
@@ -357,7 +359,7 @@ api.MapGet("/local/ai/threads/{id}/events", async (HttpResponse response, string
     }
 });
 
-api.MapPost("/local/ai/threads/{id}/events", async (
+api.MapPost("local/ai/threads/{id}/events", async (
     string id,
     AddAiChatEventRequest request,
     AiChatService aiChatService,
@@ -368,7 +370,7 @@ api.MapPost("/local/ai/threads/{id}/events", async (
     return Results.Created($"/api/local/ai/threads/{id}/events/{chatEvent.Id}", new { aiChatEvent = chatEvent });
 });
 
-api.MapPost("/local/ai/threads/{id}/runs", async (
+api.MapPost("local/ai/threads/{id}/runs", async (
     string id,
     AiChatService aiChatService,
     CancellationToken ct) =>
@@ -378,7 +380,7 @@ api.MapPost("/local/ai/threads/{id}/runs", async (
     return Results.Created($"/api/local/ai/threads/{id}/runs/{run.Id}", new { run });
 });
 
-api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
+api.MapPatch("local/ai/threads/{threadId}/runs/{runId}", async (
     string threadId,
     string runId,
     UpdateAiChatRunRequest request,
@@ -419,12 +421,12 @@ api.MapPatch("/local/ai/threads/{threadId}/runs/{runId}", async (
     return Results.Ok(new { run = run.ToDto(), thread = thread.ToDto() });
 });
 
-api.MapGet("/device-workspaces", async (IRepository<WorkflowWorkspace> workspaceRepo, CancellationToken ct) =>
+api.MapGet("device-workspaces", async (IRepository<WorkflowWorkspace> workspaceRepo, CancellationToken ct) =>
 {
     var workspaces = await workspaceRepo.ListAsync(ct);
     return Results.Ok(new { workspaces = workspaces.Select(w => w.ToDto()) });
 });
-api.MapPut("/device-workspaces", async (
+api.MapPut("device-workspaces", async (
     UpdateDeviceWorkspaceRequest request,
     IRepository<Project> projectRepo,
     IRepository<WorkflowWorkspace> workspaceRepo,
@@ -456,15 +458,15 @@ api.MapPut("/device-workspaces", async (
     return Results.Ok(new { workspace = updated?.ToDto() });
 });
 
-api.MapGet("/workflow-capabilities", (WorkflowCapabilityService capabilities) => Results.Ok(new { capabilities = capabilities.List() }));
+api.MapGet("workflow-capabilities", (WorkflowCapabilityService capabilities) => Results.Ok(new { capabilities = capabilities.List() }));
 
-api.MapPut("/workflow-capabilities", (UpdateWorkflowCapabilitiesRequest request, WorkflowCapabilityService capabilities) =>
+api.MapPut("workflow-capabilities", (UpdateWorkflowCapabilitiesRequest request, WorkflowCapabilityService capabilities) =>
 {
     var capability = capabilities.Upsert(request);
     return Results.Ok(new { capability });
 });
 
-var projects = api.MapGroup("/projects");
+var projects = api.MapGroup("projects");
 
 projects.MapGet("", async (IRepository<Project> projectRepo, IRepository<DomainTask> taskRepo, CancellationToken ct) =>
 {
@@ -508,7 +510,7 @@ projects.MapGet("{id}", async (string id, IRepository<Project> projectRepo, IRep
     return Results.Ok(new { project = project.ToDto(issueCount) });
 });
 
-var tasks = api.MapGroup("/tasks");
+var tasks = api.MapGroup("tasks");
 
 tasks.MapGet("", async (
     HttpRequest request,
@@ -839,7 +841,7 @@ tasks.MapDelete("{id}/relations/{type}/{targetTaskId}", async (string id, string
     return Results.NoContent();
 });
 
-var attachments = api.MapGroup("/attachments");
+var attachments = api.MapGroup("attachments");
 
 attachments.MapPost("", async (
     HttpRequest request,
@@ -958,6 +960,7 @@ app.MapGet("/api/events", async (HttpResponse response, IEventStreamService even
 
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseAuthorization();
 app.UseRateLimiter();
 app.UseOutputCache();
 
@@ -991,26 +994,29 @@ app.Use(async (context, next) =>
 app.UseAntiforgery();
 
 app.MapStaticAssets();
-app.MapRazorComponents<App>();
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode();
 app.MapHub<AgentLogHub>("/agent-log-hub");
 
-api.MapGet("/settings", async (SettingsService settings, CancellationToken ct) =>
+api.MapGet("settings", async (SettingsService settings, CancellationToken ct) =>
 {
     var result = await settings.GetSettingsAsync(ct);
     return Results.Ok(new { settings = result });
-}).RequireAuthorization();
+});
 
-api.MapPut("/settings", async (SaveSettingsRequest request, SettingsService settings, CancellationToken ct) =>
+api.MapPut("settings", async (SaveSettingsRequest request, SettingsService settings, CancellationToken ct) =>
 {
     await settings.SaveSettingsAsync(request, ct);
     return Results.NoContent();
 }).RequireAuthorization();
 
-api.MapGet("/skills", async (ISkillDiscoveryService skills, CancellationToken ct) =>
+api.MapGet("skills", async (ISkillDiscoveryService skills, CancellationToken ct) =>
 {
     var result = await skills.DiscoverAsync(ct);
     return Results.Ok(new { skills = result });
-}).RequireAuthorization();
+});
+
+app.MapFallbackToFile("index.html");
 
 app.Run();
 

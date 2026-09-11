@@ -1,34 +1,58 @@
 # taskboard-ai
 
-A local-first, AI-native taskboard inspired by `dashi-taskboard`, rewritten in **C# 14 / .NET 10**.
+[![.NET Build and Test](https://github.com/afonsoft/taskboard-ai/actions/workflows/dotnet.yml/badge.svg)](https://github.com/afonsoft/taskboard-ai/actions/workflows/dotnet.yml)
+[![Code Quality](https://github.com/afonsoft/taskboard-ai/actions/workflows/code-quality.yml/badge.svg)](https://github.com/afonsoft/taskboard-ai/actions/workflows/code-quality.yml)
+[![CodeQL](https://github.com/afonsoft/taskboard-ai/actions/workflows/codeql.yml/badge.svg)](https://github.com/afonsoft/taskboard-ai/actions/workflows/codeql.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 > **Default language:** English (en-us). See [README.pt-br.md](README.pt-br.md) for the Portuguese version.
 
+A local-first, AI-native taskboard inspired by `dashi-taskboard`, rewritten in **C# 14 / .NET 10**.
+
 ## Overview
 
-`taskboard-ai` is a local-first issue board for developers and AI agents. It provides a SQLite-backed task system, REST API, SSE real-time events, a `taskctl` CLI, an MCP server, and AI chat integration — all implemented in .NET 10 with ABP N-Layer / DDD.
+`taskboard-ai` is a local-first issue board for developers and AI agents. It provides a SQLite-backed task system, REST API, Server-Sent Events (SSE), a `taskctl` CLI, an MCP server, AI chat integration, and a Blazor Server web UI — all implemented in .NET 10 with ABP N-Layer / DDD.
+
+## Tech Stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| Language | C# | 14 |
+| Runtime | .NET | 10.0 |
+| Web Framework | ASP.NET Core | 10.0 |
+| DDD Framework | ABP N-Layer | 9.x |
+| ORM | Entity Framework Core | 10.0.12 |
+| Database | SQLite | bundled |
+| CLI Parser | System.CommandLine | latest stable |
+| MCP SDK | ModelContextProtocol | 2.2.0 |
+| Tests | xUnit + Shouldly + NSubstitute | latest stable |
+| Frontend | Blazor Server | .NET 10 |
+| UI Components | MudBlazor | 9.9.0 |
+| Real-time | ASP.NET Core SignalR | 10.0 |
+| GitHub API Client | Octokit | 14.0.0 |
+| Mediator | MediatR | 12.4.1 |
 
 ## Architecture
 
 ```text
 src/
-  Taskboard.Domain/            # Aggregates, entities, value objects, domain events
+  Taskboard.Domain/                 # Aggregates, entities, value objects, domain events
+  Taskboard.Domain.Shared/          # Shared domain primitives
   Taskboard.Application.Contracts/  # DTOs, interfaces
-  Taskboard.Application/       # Commands, queries, handlers (MediatR)
-  Taskboard.EntityFrameworkCore/  # EF Core + SQLite + repositories
-  Taskboard.Server/            # ASP.NET Core Minimal APIs + SSE
-  Taskboard.Cli/               # taskctl CLI (System.CommandLine)
-  Taskboard.Mcp/               # MCP server (ModelContextProtocol SDK)
-  Taskboard.AiChat/            # AI chat threads/runs/events
-  Taskboard.Workflow/          # Workflow workspaces + automation
-  Taskboard.Cloud/             # Cloud companion + sync
-  Taskboard.Integrations/      # Jira, GitHub, agent orchestration, execution helpers
-  Taskboard.Maui/              # Optional desktop Blazor Hybrid
-  Taskboard.Blazor/            # Blazor Server web UI
+  Taskboard.Application/            # Commands, queries, handlers (MediatR)
+  Taskboard.EntityFrameworkCore/    # EF Core + SQLite + repositories
+  Taskboard.Server/                 # ASP.NET Core Minimal APIs + SSE
+  Taskboard.Cli/                    # taskctl CLI (System.CommandLine)
+  Taskboard.Mcp/                    # MCP server (ModelContextProtocol SDK)
+  Taskboard.AiChat/                 # AI chat threads/runs/events
+  Taskboard.Workflow/               # Workflow workspaces + automation
+  Taskboard.Cloud/                  # Cloud companion + sync
+  Taskboard.Integrations/           # Jira, GitHub, agent orchestration, execution helpers
+  Taskboard.Maui/                   # Optional desktop Blazor Hybrid
+  Taskboard.Blazor/                 # Blazor Server web UI
 tests/
-  Taskboard.Domain.Tests/
-  Taskboard.Application.Tests/
-  Taskboard.IntegrationTests/
+  Taskboard.Tests.Unit/             # 89 unit tests
+  Taskboard.Tests.Integration/      # 9 integration tests
 ```
 
 ## Quick Start
@@ -43,6 +67,16 @@ dotnet run --project src/Taskboard.Server
 ```
 
 See [`docs/installation.md`](docs/installation.md) for detailed setup, environment variables, and troubleshooting.
+
+## CLI Installer
+
+Install the `taskctl` CLI to `/usr/local/bin`:
+
+```bash
+./install-cli.sh
+```
+
+See [`install-cli.sh`](install-cli.sh) and [`docs/installation.md`](docs/installation.md) for details.
 
 ## Continuous Integration
 
@@ -61,11 +95,15 @@ Set `GITHUB_TOKEN` before starting the server:
 export GITHUB_TOKEN=your-github-token
 ```
 
-Open `/github-board` to view GitHub issues as a Kanban board. Drag an issue to
-**In Progress**, select an installed agent, and follow execution in the
-**Logs** tab. The supported CLIs are Devin, Claude, Codex, OpenCode, and
-OpenHands. Real-time agent logs are streamed through the SignalR hub at
-`/agent-log-hub`.
+Open `/github-board` to view GitHub issues as a Kanban board. Drag an issue to **In Progress**, select an installed agent, and follow execution in the **Logs** tab. Supported CLIs include Devin, Claude, Codex, OpenCode, and OpenHands. Real-time agent logs are streamed through the SignalR hub at `/agent-log-hub`.
+
+## Recent Highlights
+
+- Agent orchestration with CLI detection and SignalR log streaming.
+- SQLite persistence for `AgentLogMessage` via EF Core.
+- JSON-RPC ACP adapter over stdin/stdout for agent communication.
+- `.devin/` and `.agent/` harness for Devin CLI and Google Antigravity.
+- Refined GitHub Actions with cache, concurrency, permissions, SonarCloud, and CodeQL.
 
 ## Build Order
 
@@ -86,8 +124,7 @@ See [`.specs/CAPABILITY-MAP.md`](.specs/CAPABILITY-MAP.md).
 - [`docs/plugins.md`](docs/plugins.md) — Plugins and integrations
 - [`docs/features.md`](docs/features.md) — Features
 - [`docs/api.md`](docs/api.md) — REST API and SSE
-- [`docs/architecture/`](docs/architecture/) — Architecture diagrams (generated with the Archify skill)
-  - [`docs/architecture/architecture.html`](docs/architecture/architecture.html) — Interactive system architecture diagram
+- [`docs/architecture/`](docs/architecture/) — Architecture diagrams
 - [`.specs/`](.specs/) — Specification-driven development (SDD) specs
 
 ## Agent Harness
@@ -103,8 +140,7 @@ The agent harness uses skills from [`afonsoft/skills`](https://github.com/afonso
 npx skills add afonsoft/skills
 ```
 
-This installs skills into `.claude/skills` and `.devin/skills`; `skills-lock.json`
-records the locked skill sources.
+This installs skills into `.claude/skills` and `.devin/skills`; `skills-lock.json` records the locked skill sources.
 
 ## Contributing
 
@@ -115,4 +151,4 @@ records the locked skill sources.
 
 ## License
 
-MIT (to be confirmed — see `LICENSE` if present).
+MIT — see [`LICENSE`](LICENSE).

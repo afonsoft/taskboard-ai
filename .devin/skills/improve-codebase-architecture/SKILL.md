@@ -13,6 +13,11 @@ metadata:
 
 Surface architectural friction and propose **deepening opportunities** — refactors that turn shallow modules into deep ones. The aim is testability and AI-navigability.
 
+## When to Use
+
+- User asks or mentions this skill in English (e.g., "use /improve-codebase-architecture", "run improve-codebase-architecture").
+- O usuário pede ou menciona esta skill em português (ex.: "use /improve-codebase-architecture", "execute improve-codebase-architecture").
+
 ## Glossary
 
 Use these terms exactly in every suggestion. Consistent language is the point — don't drift into "component," "service," "API," or "boundary." Full definitions in [LANGUAGE.md](references/LANGUAGE.md).
@@ -32,13 +37,13 @@ Key principles (see [LANGUAGE.md](references/LANGUAGE.md) for the full list):
 - **The interface is the test surface.**
 - **One adapter = hypothetical seam. Two adapters = real seam.**
 
-This skill is _informed_ by the project's domain model. The domain language in `.claude/CONTEXT.md` gives names to good seams; approved SPEC SDDs in `.specs/` record the decisions this skill should not re-litigate.
+This skill is _informed_ by the project's domain model. The domain language in `.claude/CONTEXT.md` and the cross-session context in `.claude/MEMORY.md` give names to good seams; approved architecture decisions in `docs/architecture/` record the constraints this skill should not re-litigate.
 
 ## Process
 
 ### 1. Explore
 
-Read the project's domain glossary and any approved SPEC SDDs in `.specs/` (or architecture decisions in `docs/architecture/` if the project still uses them) that touch the area first.
+Read the project's domain glossary (`.claude/CONTEXT.md`), cross-session memory (`.claude/MEMORY.md`), and approved architecture decisions in `docs/architecture/` (or `docs/adr/` if the project still uses them) that touch the area first.
 
 Then spawn a read-only exploration subagent to walk the codebase. Don't follow rigid heuristics — explore organically and note where you experience friction:
 

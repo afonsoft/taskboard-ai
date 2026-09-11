@@ -34,6 +34,9 @@ This skill reads diffs, PR descriptions, comments, and source code to evaluate c
 - When refactoring existing code
 - After any bug fix (review both the fix and the regression test)
 
+- User asks or mentions this skill in English (e.g., "use /code-review-and-quality", "run code-review-and-quality").
+- O usuário pede ou menciona esta skill em português (ex.: "use /code-review-and-quality", "execute code-review-and-quality").
+
 ## The Five-Axis Review
 
 Every review evaluates code across these dimensions:
@@ -163,6 +166,8 @@ Before looking at code, understand the intent:
 - What spec or task does it implement?
 - What is the expected behavior change?
 ```
+
+**SonarQube check:** If the repository uses SonarQube (e.g., `sonar-project.properties`, `.sonarrc`, SonarQube step in CI/CD, or any `sonar.*` configuration), stop the review and invoke `/sonarqube-autofix`. That skill will download unresolved issues, classify them by type (`bug`, `code smell`, `security`), and create approved SPEC SDDs. Resume this review only after `/execute-tdd-spec` has implemented the generated SPECs.
 
 ### Step 2: Review the Tests First
 

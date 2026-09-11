@@ -24,7 +24,7 @@ public sealed class SkillDiscoveryService : ISkillDiscoveryService
 
             foreach (var directory in Directory.EnumerateDirectories(source.Path))
             {
-                var skillFile = Path.Combine(directory, "SKILL.md");
+                var skillFile = Path.Join(directory, "SKILL.md");
                 if (!File.Exists(skillFile))
                 {
                     continue;

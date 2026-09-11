@@ -77,14 +77,11 @@ public sealed class SettingsService
             await _agentPreferenceRepo.DeleteAsync(preference, cancellationToken);
         }
 
-        var enabledTypes = new HashSet<AgentType>();
-        foreach (var name in request.EnabledAgents)
-        {
-            if (Enum.TryParse<AgentType>(name, out var type))
-            {
-                enabledTypes.Add(type);
-            }
-        }
+        var enabledTypes = request.EnabledAgents
+            .Select(name => (Parsed: Enum.TryParse<AgentType>(name, out var type), Value: type))
+            .Where(x => x.Parsed)
+            .Select(x => x.Value)
+            .ToHashSet();
 
         foreach (var type in enabledTypes)
         {

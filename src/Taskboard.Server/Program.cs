@@ -102,11 +102,11 @@ builder.Services.AddSingleton<IGitHubService, GitHubService>();
 builder.Services.AddSingleton<IAgentDiscoveryService, AgentDiscoveryService>();
 builder.Services.AddSingleton<ISkillDiscoveryService>(sp => new SkillDiscoveryService(new[]
 {
-    new SkillDiscoverySource("claude", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "skills")),
-    new SkillDiscoverySource("devin", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".devin", "skills")),
-    new SkillDiscoverySource("cursor", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "skills")),
-    new SkillDiscoverySource("opencode", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".opencode", "skills")),
-    new SkillDiscoverySource("taskboard", Path.Combine(Directory.GetCurrentDirectory(), "skills"))
+    new SkillDiscoverySource("claude", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "skills")),
+    new SkillDiscoverySource("devin", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".devin", "skills")),
+    new SkillDiscoverySource("cursor", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "skills")),
+    new SkillDiscoverySource("opencode", Path.Join(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".opencode", "skills")),
+    new SkillDiscoverySource("taskboard", Path.Join(Directory.GetCurrentDirectory(), "skills"))
 }));
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<IAgentAcpClient, LocalCliAgentAcpClient>();
@@ -220,12 +220,25 @@ await using (var scope = app.Services.CreateAsyncScope())
 
 var api = app.MapGroup("/api");
 
+static bool IsLocalUrl(string? url)
+{
+    if (string.IsNullOrEmpty(url))
+    {
+        return true;
+    }
+
+    return url[0] == '/'
+        && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'))
+        && !url.Contains("://", StringComparison.Ordinal);
+}
+
 api.MapPost("login", async (HttpContext context, AdminUser admin) =>
 {
     var form = await context.Request.ReadFormAsync();
     var username = form["Username"].ToString();
     var password = form["Password"].ToString();
-    var returnUrl = form["ReturnUrl"].ToString() ?? "/";
+    var rawReturnUrl = form["ReturnUrl"].ToString() ?? "/";
+    var returnUrl = IsLocalUrl(rawReturnUrl) ? rawReturnUrl : "/";
 
     if (!string.Equals(admin.Username, username, StringComparison.Ordinal)
         || !admin.Validate(password))

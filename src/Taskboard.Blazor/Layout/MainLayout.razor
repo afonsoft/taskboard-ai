@@ -55,7 +55,7 @@
             var settings = await Client.GetSettingsAsync();
             _isDarkMode = settings.Theme != "light";
         }
-        catch
+        catch (HttpRequestException)
         {
             _isDarkMode = true;
         }

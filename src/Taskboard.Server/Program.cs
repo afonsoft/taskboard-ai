@@ -27,7 +27,11 @@ using Taskboard.Integrations.Agents;
 using Taskboard.Integrations.Execution;
 using Taskboard.Integrations.GitHub;
 using Taskboard.Integrations.Jira;
+using Taskboard.Integrations.Skills;
 using Taskboard.Agents;
+using Taskboard.Application.Contracts.Settings;
+using Taskboard.Application.Contracts.Skills;
+using Taskboard.Application.Settings;
 using Taskboard.GitHub;
 using Taskboard.Json;
 using Taskboard.Server.HealthChecks;
@@ -96,6 +100,15 @@ builder.Services.AddMudServices();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IGitHubService, GitHubService>();
 builder.Services.AddSingleton<IAgentDiscoveryService, AgentDiscoveryService>();
+builder.Services.AddSingleton<ISkillDiscoveryService>(sp => new SkillDiscoveryService(new[]
+{
+    new SkillDiscoverySource("claude", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "skills")),
+    new SkillDiscoverySource("devin", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".devin", "skills")),
+    new SkillDiscoverySource("cursor", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cursor", "skills")),
+    new SkillDiscoverySource("opencode", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".opencode", "skills")),
+    new SkillDiscoverySource("taskboard", Path.Combine(Directory.GetCurrentDirectory(), "skills"))
+}));
+builder.Services.AddScoped<SettingsService>();
 builder.Services.AddSingleton<IAgentAcpClient, LocalCliAgentAcpClient>();
 builder.Services.AddSingleton<IAgentAdapter, KnownCliAgentAdapter>();
 builder.Services.AddSingleton<IAgentLogBroadcaster, SignalRAgentLogBroadcaster>();
@@ -965,6 +978,24 @@ app.UseAntiforgery();
 app.MapStaticAssets();
 app.MapRazorComponents<App>();
 app.MapHub<AgentLogHub>("/agent-log-hub");
+
+api.MapGet("/settings", async (SettingsService settings, CancellationToken ct) =>
+{
+    var result = await settings.GetSettingsAsync(ct);
+    return Results.Ok(new { settings = result });
+}).RequireAuthorization();
+
+api.MapPut("/settings", async (SaveSettingsRequest request, SettingsService settings, CancellationToken ct) =>
+{
+    await settings.SaveSettingsAsync(request, ct);
+    return Results.NoContent();
+}).RequireAuthorization();
+
+api.MapGet("/skills", async (ISkillDiscoveryService skills, CancellationToken ct) =>
+{
+    var result = await skills.DiscoverAsync(ct);
+    return Results.Ok(new { skills = result });
+}).RequireAuthorization();
 
 app.Run();
 

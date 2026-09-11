@@ -1,17 +1,32 @@
 @page "/login"
 
-<div class="login-container">
-    <h1>Taskboard</h1>
-    <form method="post" action="/api/login" class="login-form">
-        <label>
-            Username
-            <input type="text" name="Username" required autofocus />
-        </label>
-        <label>
-            Password
-            <input type="password" name="Password" required />
-        </label>
-        <input type="hidden" name="ReturnUrl" value="/" />
-        <button type="submit">Sign in</button>
-    </form>
+<PageTitle>Login - Taskboard</PageTitle>
+
+<div class="d-flex align-center justify-center" style="min-height: 70vh;">
+    <MudCard Elevation="4" Style="width: 360px;">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h4" Align="Align.Center">Taskboard</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <form method="post" action="/api/login" class="d-flex flex-column gap-4">
+                <div>
+                    <MudText Typo="Typo.body2">Username</MudText>
+                    <input type="text" name="Username" required autofocus style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.body2">Password</MudText>
+                    <input type="password" name="Password" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
+                </div>
+                <input type="hidden" name="ReturnUrl" value="/" />
+                <MudButton ButtonType="ButtonType.Submit" 
+                           Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           FullWidth="true">
+                    Sign in
+                </MudButton>
+            </form>
+        </MudCardContent>
+    </MudCard>
 </div>

@@ -9,7 +9,7 @@
 - **iniciado_em**: `2026-09-10 13:40:00`
 - **fase_atual**: `Fase 5`
 - **repositorio**: `afonsoft/taskboard-ai`
-- **branch_trabalho**: `feature/agent-orchestration`
+- **branch_trabalho**: `devin/spec-20260910-ui-login-settings-skills`
 - **framework**: `afonsoft/skills` instalado via `npx skills add afonsoft/skills` (ver `skills-lock.json`)
 
 ---
@@ -124,3 +124,46 @@
 | # | GAP | Tarefa | Skill | Status |
 |---|-----|--------|-------|--------|
 | 1 | GAP-001 | Atualizar `.github/workflows/dotnet.yml` e adicionar `codeql.yml`, `dependabot.yml` | /dotnet-github-actions | 🟡 pending_approval |
+
+---
+
+## Fase 4 — Novas Tarefas Aprovadas (Sessão 2026-09-10)
+
+As specs aprovadas nesta sessão foram registradas para execução:
+
+### Novas GAPs
+
+| # | ID | Dimensão | Severidade | Descritivo | Tier Risco | Status |
+|---|---|---|---|---|---|---|
+| 5 | `GAP-005` | Frontend/UX | P2 | Telas de login, configurações e skills (tema dark/light, agentes, skills) | T2 | 🟡 queued |
+| 6 | `GAP-006` | DevEx | P4 | Instalador leve `install-cli.sh` em `/usr/local/bin` com alias | T2 | 🟡 queued |
+
+### Novas Tarefas
+
+```yaml
+- id: TASK-006
+  desc: "Implementar telas de login, configurações e skills (SPEC-20260910-ui-login-settings-skills)"
+  skill: /tdd-spec
+  gap_ref: GAP-005
+  issue_ref: "https://github.com/afonsoft/taskboard-ai/issues/24"
+  spec_ref: ".specs/SPEC-20260910-ui-login-settings-skills.md"
+  depends_on: []
+  status: done
+  concluido_em: "2026-09-11"
+
+- id: TASK-007
+  desc: "Implementar instalador CLI `install-cli.sh` em /usr/local/bin (SPEC-20260910-install-cli-sh)"
+  skill: /tdd-spec
+  gap_ref: GAP-006
+  issue_ref: "https://github.com/afonsoft/taskboard-ai/issues/25"
+  spec_ref: ".specs/SPEC-20260910-install-cli-sh.md"
+  depends_on: []
+  status: done
+  concluido_em: "2026-09-11"
+```
+
+### Próximos passos
+
+1. Criar Issues no GitHub para `TASK-006` e `TASK-007` (Phase 3).
+2. Iniciar execução com `/tdd-spec` na ordem de prioridade escolhida.
+3. Re-validar após cada slice.

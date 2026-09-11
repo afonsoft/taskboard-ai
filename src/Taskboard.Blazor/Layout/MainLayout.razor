@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject IHttpContextAccessor HttpContextAccessor
+@inject TaskboardClient Client
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
@@ -17,6 +18,11 @@
                 Color="Color.Inherit"
                 aria-label="toggle theme"
                 OnClick="ToggleTheme" />
+            <MudIconButton
+                Icon="@Icons.Material.Filled.Settings"
+                Color="Color.Inherit"
+                Href="/settings"
+                aria-label="settings" />
             <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
             @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
             {
@@ -40,7 +46,20 @@
 </div>
 
 @code {
-    private bool _isDarkMode;
+    private bool _isDarkMode = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var settings = await Client.GetSettingsAsync();
+            _isDarkMode = settings.Theme != "light";
+        }
+        catch
+        {
+            _isDarkMode = true;
+        }
+    }
 
     private void ToggleTheme()
     {

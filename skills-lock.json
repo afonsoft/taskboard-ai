@@ -120,6 +120,12 @@
       "sourceType": "github",
       "skillPath": "skills/wordpress-mcp/SKILL.md",
       "computedHash": "c568c797db4bd1d225c4a8e2d79702f64593fb4f140e9839e230b3616094c799"
+    },
+    "design": {
+      "source": "afonsoft/skills",
+      "sourceType": "github",
+      "skillPath": "skills/design/SKILL.md",
+      "computedHash": "0f8ca4cb629f2d305d333f2d71e6bcccaf3c33bd81bdb144564aeb92bdffcdf2"
     }
   }
 }

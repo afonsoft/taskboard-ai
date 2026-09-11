@@ -18,12 +18,43 @@ else if (_project is null)
 }
 else
 {
+    <div class="kanban-board-header">
+        <div class="field">
+            <label>Project Name</label>
+            <span class="value">@(_project?.Name ?? "All Projects")</span>
+        </div>
+        <div class="field">
+            <label>Start Date</label>
+            <span class="value">@GetFormattedStartDate()</span>
+        </div>
+        <div class="field">
+            <label>End Date</label>
+            <span class="value">@GetFormattedEndDate()</span>
+        </div>
+        <div class="field">
+            <label>Duration in Days</label>
+            <span class="value">@GetDurationDays()</span>
+        </div>
+        <div class="field legend">
+            <label>Priority Level</label>
+            <div class="legend mt-1">
+                @foreach (var priority in _priorities)
+                {
+                    <span class="text-text text-xs">
+                        <span class="task-priority-swatch" style="@GetPrioritySwatchStyle(priority)"></span>
+                        @priority
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+
     <div class="kanban-board">
         @foreach (var status in _statuses)
         {
             <div class="kanban-column">
-                <div class="kanban-column-header">
-                    <h2 class="text-sm font-semibold capitalize text-text">@status</h2>
+                <div class="kanban-column-header @GetStatusClass(status)">
+                    <h2 class="text-sm font-semibold capitalize">@status</h2>
                     <span class="kanban-label">@GetTasks(status).Count()</span>
                 </div>
                 <div class="kanban-column-body" style="max-height: 70vh;">
@@ -41,8 +72,8 @@ else
             </div>
         }
         <div class="kanban-column">
-            <div class="kanban-column-header">
-                <h2 class="text-sm font-semibold capitalize text-text">archived</h2>
+            <div class="kanban-column-header @GetStatusClass("archived")">
+                <h2 class="text-sm font-semibold capitalize">archived</h2>
                 <span class="kanban-label">@_tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).Count()</span>
             </div>
             <div class="kanban-column-body" style="max-height: 70vh;">
@@ -70,6 +101,7 @@ else
     private ProjectDto? _project;
     private List<TaskDto> _tasks = [];
     private readonly string[] _statuses = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "canceled"];
+    private readonly string[] _priorities = ["Urgent", "High", "Medium", "Low", "None"];
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,5 +131,51 @@ else
         return _tasks
             .Where(t => t.Status == status && t.ArchivedAt is null)
             .OrderBy(t => t.SortOrder);
+    }
+
+    private string GetStatusClass(string status) => status.ToLowerInvariant() switch
+    {
+        "backlog" or "todo" => "status-not-started",
+        "in_progress" or "in_review" => "status-in-progress",
+        "blocked" or "delayed" => "status-on-hold",
+        "done" => "status-completed",
+        "canceled" or "archived" => "status-archived",
+        _ => "status-on-hold"
+    };
+
+    private string GetFormattedStartDate()
+    {
+        var start = _tasks
+            .Where(t => t.StartDate is not null)
+            .MinBy(t => t.StartDate)
+            ?.StartDate;
+        return start?.ToString("MM/dd/yyyy") ?? "—";
+    }
+
+    private string GetFormattedEndDate()
+    {
+        var end = _tasks
+            .Where(t => t.DueDate is not null)
+            .MaxBy(t => t.DueDate)
+            ?.DueDate;
+        return end?.ToString("MM/dd/yyyy") ?? "—";
+    }
+
+    private string GetDurationDays()
+    {
+        var start = _tasks.Where(t => t.StartDate is not null).MinBy(t => t.StartDate)?.StartDate;
+        var end = _tasks.Where(t => t.DueDate is not null).MaxBy(t => t.DueDate)?.DueDate;
+        if (start is null || end is null)
+        {
+            return "—";
+        }
+        var duration = end.Value - start.Value;
+        return duration.TotalDays > 0 ? duration.TotalDays.ToString("F0") : "—";
+    }
+
+    private string GetPrioritySwatchStyle(string priority)
+    {
+        var key = priority.ToLowerInvariant();
+        return $"background-color: var(--priority-{key}-border);";
     }
 }

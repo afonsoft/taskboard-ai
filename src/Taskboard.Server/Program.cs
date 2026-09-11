@@ -5,8 +5,11 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using MudBlazor.Services;
 using Microsoft.EntityFrameworkCore;
 using Taskboard;
@@ -27,6 +30,7 @@ using Taskboard.Integrations.Jira;
 using Taskboard.Agents;
 using Taskboard.GitHub;
 using Taskboard.Json;
+using Taskboard.Server.HealthChecks;
 using Taskboard.Server.Hubs;
 using Taskboard.Repositories;
 using Taskboard.Requests;
@@ -40,8 +44,16 @@ using TaskStatus = Taskboard.ValueObjects.TaskStatus;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var serverUrls = TaskboardEnvironment.GetServerUrls();
+var environment = new TaskboardEnvironment(builder.Configuration, builder.Environment);
+var serverUrls = environment.GetServerUrls();
 builder.WebHost.UseUrls(serverUrls);
+
+builder.Services.AddOptions<TaskboardOptions>()
+    .BindConfiguration("Taskboard")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<AdminOptions>()
+    .BindConfiguration("Admin");
 
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
@@ -102,11 +114,63 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddResponseCompression(options =>
+{
+    options.MimeTypes =
+    [
+        "text/plain",
+        "text/css",
+        "text/html",
+        "application/javascript",
+        "application/json",
+        "image/svg+xml"
+    ];
+});
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy("ReadOnlyApi", p => p.Expire(TimeSpan.FromSeconds(60)));
+    options.AddPolicy("StaticAssets", p => p.Expire(TimeSpan.FromDays(1)));
+});
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("login", policy =>
+    {
+        policy.PermitLimit = 5;
+        policy.Window = TimeSpan.FromMinutes(1);
+        policy.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        policy.QueueLimit = 0;
+    });
 
-var adminDataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
+    options.AddFixedWindowLimiter("api", policy =>
+    {
+        policy.PermitLimit = 100;
+        policy.Window = TimeSpan.FromMinutes(1);
+        policy.QueueProcessingOrder = System.Threading.RateLimiting.QueueProcessingOrder.OldestFirst;
+        policy.QueueLimit = 0;
+    });
+});
+builder.Services.AddHealthChecks()
+    .AddCheck("live", () => HealthCheckResult.Healthy("Alive."), tags: ["live"])
+    .AddCheck("data-directory", () =>
+    {
+        var dataDir = environment.GetDataDir();
+        return Directory.Exists(dataDir)
+            ? HealthCheckResult.Healthy("Data directory exists.")
+            : HealthCheckResult.Unhealthy($"Data directory does not exist: {dataDir}");
+    }, tags: ["data"])
+    .AddCheck<TaskboardDbContextHealthCheck>("database", tags: ["db"]);
+builder.Services.AddLocalization(options => options.ResourcesPath = "Resources");
+builder.Services.AddRequestLocalization(options =>
+{
+    options.SupportedCultures = [new System.Globalization.CultureInfo("en-US"), new System.Globalization.CultureInfo("pt-BR")];
+    options.SupportedUICultures = options.SupportedCultures;
+    options.DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture("en-US");
+});
+
+var adminDataDir = environment.GetDataDir();
 builder.Services.AddSingleton(AdminUser.CreateFromConfiguration(builder.Configuration, adminDataDir));
 
-var dataDir = TaskboardEnvironment.GetDataDir(builder.Environment.ContentRootPath);
+var dataDir = environment.GetDataDir();
 Directory.CreateDirectory(dataDir);
 var connectionString = $"Data Source={Path.Combine(dataDir, "taskboard.sqlite")}";
 
@@ -124,6 +188,8 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 app.UseCors("Dev");
+app.UseResponseCompression();
+app.UseRequestLocalization();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {
@@ -170,7 +236,8 @@ api.MapPost("login", async (HttpContext context, AdminUser admin) =>
         new AuthenticationProperties { IsPersistent = true, RedirectUri = returnUrl });
 
     context.Response.Redirect(returnUrl);
-}).DisableAntiforgery();
+}).DisableAntiforgery()
+.RequireRateLimiting("login");
 
 api.MapPost("logout", async (HttpContext context) =>
 {
@@ -178,9 +245,18 @@ api.MapPost("logout", async (HttpContext context) =>
     context.Response.Redirect("/login");
 }).DisableAntiforgery();
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }));
+app.MapHealthChecks("/health").CacheOutput("ReadOnlyApi");
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("data") || registration.Tags.Contains("db")
+});
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("live")
+});
 
-api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }));
+api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }))
+   .CacheOutput("ReadOnlyApi");
 
 api.MapGet("/client-storage", () => Results.Ok(new { data = (string?)null }));
 api.MapPut("/client-storage", (object? _) => Results.NoContent());
@@ -854,6 +930,8 @@ app.MapGet("/api/events", async (HttpResponse response, IEventStreamService even
 
 app.UseStaticFiles();
 app.UseAuthentication();
+app.UseRateLimiter();
+app.UseOutputCache();
 
 app.Use(async (context, next) =>
 {

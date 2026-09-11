@@ -1,4 +1,7 @@
 using System;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using NSubstitute;
 using Shouldly;
 using Taskboard.Application.Contracts.Configuration;
 using Xunit;
@@ -7,26 +10,39 @@ namespace Taskboard.Tests.Unit.Configuration;
 
 public class TaskboardEnvironmentTests
 {
+    private readonly IHostEnvironment _hostEnvironment;
+
+    public TaskboardEnvironmentTests()
+    {
+        _hostEnvironment = Substitute.For<IHostEnvironment>();
+        _hostEnvironment.ContentRootPath.Returns("/app");
+    }
+
+    private TaskboardEnvironment CreateSut(IConfiguration? configuration = null)
+    {
+        return new TaskboardEnvironment(configuration ?? new ConfigurationBuilder().Build(), _hostEnvironment);
+    }
+
     [Fact]
     public void GetPort_WhenTaskboardPortIsSet_ShouldReturnConfiguredValue()
     {
-        // Covers RF-001: Rename server port variable
+        // Covers FR-003: port resolved from TASKBOARD_PORT env
         using var _ = SetEnv("TASKBOARD_PORT", "8080");
 
-        var port = TaskboardEnvironment.GetPort();
+        var port = CreateSut().GetPort();
 
-        port.ShouldBe("8080");
+        port.ShouldBe(8080);
     }
 
     [Fact]
     public void GetPort_WhenTaskboardPortIsNotSet_ShouldReturnDefault()
     {
-        // Covers RF-001: Rename server port variable
+        // Covers FR-003: default port
         using var _ = ClearEnv("TASKBOARD_PORT");
 
-        var port = TaskboardEnvironment.GetPort();
+        var port = CreateSut().GetPort();
 
-        port.ShouldBe("47823");
+        port.ShouldBe(47823);
     }
 
     [Fact]
@@ -36,18 +52,18 @@ public class TaskboardEnvironmentTests
         using var _1 = ClearEnv("TASKBOARD_PORT");
         using var _2 = SetEnv("CODEX_TASKBOARD_PORT", "9000");
 
-        var port = TaskboardEnvironment.GetPort();
+        var port = CreateSut().GetPort();
 
-        port.ShouldBe("47823");
+        port.ShouldBe(47823);
     }
 
     [Fact]
     public void GetDataDir_WhenTaskboardDataDirIsSet_ShouldReturnConfiguredValue()
     {
-        // Covers RF-002: Rename data directory variable
+        // Covers FR-003: data dir resolved from TASKBOARD_DATA_DIR env
         using var _ = SetEnv("TASKBOARD_DATA_DIR", "/var/taskboard");
 
-        var dataDir = TaskboardEnvironment.GetDataDir("/fallback");
+        var dataDir = CreateSut().GetDataDir();
 
         dataDir.ShouldBe("/var/taskboard");
     }
@@ -55,10 +71,10 @@ public class TaskboardEnvironmentTests
     [Fact]
     public void GetDataDir_WhenTaskboardDataDirIsNotSet_ShouldReturnDefaultUnderBasePath()
     {
-        // Covers RF-002: Rename data directory variable
+        // Covers FR-003: default data dir under content root
         using var _ = ClearEnv("TASKBOARD_DATA_DIR");
 
-        var dataDir = TaskboardEnvironment.GetDataDir("/app");
+        var dataDir = CreateSut().GetDataDir();
 
         dataDir.ShouldBe("/app/.data");
     }
@@ -70,7 +86,7 @@ public class TaskboardEnvironmentTests
         using var _1 = ClearEnv("TASKBOARD_DATA_DIR");
         using var _2 = SetEnv("CODEX_TASKBOARD_DATA_DIR", "/old");
 
-        var dataDir = TaskboardEnvironment.GetDataDir("/app");
+        var dataDir = CreateSut().GetDataDir();
 
         dataDir.ShouldBe("/app/.data");
     }
@@ -78,10 +94,10 @@ public class TaskboardEnvironmentTests
     [Fact]
     public void GetServerUrls_WhenTaskboardPortIsSet_ShouldReturnLocalhostUrl()
     {
-        // Covers RF-001: server URLs derive from TASKBOARD_PORT
+        // Covers FR-003: server URLs derive from TASKBOARD_PORT
         using var _ = SetEnv("TASKBOARD_PORT", "8080");
 
-        var urls = TaskboardEnvironment.GetServerUrls();
+        var urls = CreateSut().GetServerUrls();
 
         urls.ShouldBe("http://127.0.0.1:8080");
     }
@@ -92,9 +108,23 @@ public class TaskboardEnvironmentTests
         // Covers existing ASPNETCORE_URLS override behavior
         using var _ = SetEnv("ASPNETCORE_URLS", "http://0.0.0.0:5000");
 
-        var urls = TaskboardEnvironment.GetServerUrls();
+        var urls = CreateSut().GetServerUrls();
 
         urls.ShouldBe("http://0.0.0.0:5000");
+    }
+
+    [Fact]
+    public void GetPort_WhenConfiguredInAppSettings_ShouldReturnConfiguredValue()
+    {
+        // Covers FR-002: strongly-typed options override env
+        using var _ = ClearEnv("TASKBOARD_PORT");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection([new KeyValuePair<string, string?>("Taskboard:Port", "9090")])
+            .Build();
+
+        var port = CreateSut(configuration).GetPort();
+
+        port.ShouldBe(9090);
     }
 
     private static IDisposable SetEnv(string name, string value)

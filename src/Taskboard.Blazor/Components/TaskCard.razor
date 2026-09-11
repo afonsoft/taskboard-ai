@@ -1,14 +1,25 @@
-<div class="task-card">
+<div class="task-card @GetPriorityClass()" @onclick="OpenDetail" role="button" tabindex="0" @onkeydown="HandleKeyDown">
     <div class="task-title">@Task.Title</div>
+    @if (!string.IsNullOrWhiteSpace(Task.Description))
+    {
+        <div class="task-description">@Task.Description</div>
+    }
     <div class="task-meta">
-        <span class="badge">@Task.Priority</span>
-        <span class="status">@Task.Status</span>
+        <span class="task-priority-swatch" style="@GetPrioritySwatchStyle()"></span>
+        <span>@GetPriorityLabel()</span>
+        <span class="text-text-muted">|</span>
+        <span>@(Task.Assignee?.Name ?? "—")</span>
+        <span class="text-text-muted">|</span>
+        <span>@(Task.DueDate?.ToString("MM/dd/yyyy") ?? "—")</span>
     </div>
 </div>
 
 @code {
     [Parameter]
     public TaskDto Task { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<TaskDto> OnOpen { get; set; }
 
     private TaskDto? _previousTask;
 
@@ -25,5 +36,27 @@
     protected override bool ShouldRender()
     {
         return _previousTask is null || !Task.Equals(_previousTask);
+    }
+
+    private string GetPriorityClass() => $"priority-{Task.Priority?.ToLowerInvariant() ?? "none"}";
+
+    private string GetPrioritySwatchStyle()
+    {
+        return $"background-color: var(--priority-{Task.Priority?.ToLowerInvariant() ?? "none"}-border);";
+    }
+
+    private string GetPriorityLabel() => char.ToUpper(Task.Priority[0]) + Task.Priority[1..];
+
+    private async Task OpenDetail()
+    {
+        await OnOpen.InvokeAsync(Task);
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Code is "Enter" or "Space")
+        {
+            await OpenDetail();
+        }
     }
 }

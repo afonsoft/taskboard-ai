@@ -43,7 +43,8 @@ public sealed class SettingsService
                 a.Name,
                 a.ExecutablePath,
                 a.Version,
-                enabledByType.TryGetValue(a.Type, out var preference) && preference.Enabled))
+                enabledByType.TryGetValue(a.Type, out var preference) && preference.Enabled,
+                a.Description))
             .ToList()
             .AsReadOnly();
 

@@ -36,7 +36,7 @@ public class SettingsServiceTests
         discovery.DiscoverAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<AgentInfo>>(new List<AgentInfo>
             {
-                new AgentInfo("claude", "/usr/bin/claude", AgentType.Claude, AgentStatus.Available, "1.0")
+                new AgentInfo("claude", "/usr/bin/claude", AgentType.Claude, AgentStatus.Available, "1.0", null)
             }));
 
         var service = new SettingsService(userRepo, agentRepo, discovery);

@@ -18,6 +18,15 @@ public sealed class AgentDiscoveryService : IAgentDiscoveryService
         [AgentType.OpenHands] = "openhands"
     };
 
+    private static readonly Dictionary<AgentType, string> KnownDescriptions = new()
+    {
+        [AgentType.Devin] = "Devin CLI for agentic coding",
+        [AgentType.Claude] = "Claude Code integration",
+        [AgentType.Codex] = "OpenAI Codex CLI for code generation",
+        [AgentType.OpenCode] = "OpenCode agentic IDE",
+        [AgentType.OpenHands] = "OpenHands autonomous software engineer"
+    };
+
     public Task<IReadOnlyList<AgentInfo>> DiscoverAsync(CancellationToken cancellationToken = default)
     {
         var agents = new List<AgentInfo>();
@@ -25,14 +34,15 @@ public sealed class AgentDiscoveryService : IAgentDiscoveryService
         foreach (var (type, name) in KnownAgents)
         {
             var executablePath = PathSearch.FindExecutable(name);
+            KnownDescriptions.TryGetValue(type, out var description);
             if (executablePath is null)
             {
-                agents.Add(new AgentInfo(name, string.Empty, type, AgentStatus.Unavailable, null));
+                agents.Add(new AgentInfo(name, string.Empty, type, AgentStatus.Unavailable, null, description));
                 continue;
             }
 
             var version = TryGetVersion(executablePath, cancellationToken);
-            agents.Add(new AgentInfo(name, executablePath, type, AgentStatus.Available, version));
+            agents.Add(new AgentInfo(name, executablePath, type, AgentStatus.Available, version, description));
         }
 
         return Task.FromResult<IReadOnlyList<AgentInfo>>(agents.AsReadOnly());

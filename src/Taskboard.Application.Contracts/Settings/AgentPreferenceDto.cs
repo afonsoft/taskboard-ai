@@ -7,4 +7,5 @@ public sealed record AgentPreferenceDto(
     string Name,
     string? ExecutablePath,
     string? Version,
-    bool Enabled);
+    bool Enabled,
+    string? Description);

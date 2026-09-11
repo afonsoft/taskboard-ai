@@ -66,6 +66,12 @@ public sealed class TaskboardClient
         return response?.Skills ?? [];
     }
 
+    public async Task ChangePasswordAsync(ChangePasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PutAsJsonAsync("/api/admin/password", request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
     public async Task<SkillDetailDto?> GetSkillDetailAsync(string source, string name, CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.GetAsync($"/api/skills/{Uri.EscapeDataString(source)}/{Uri.EscapeDataString(name)}", cancellationToken);

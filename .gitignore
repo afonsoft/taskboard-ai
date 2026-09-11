@@ -39,6 +39,11 @@ ScaffoldingReadMe.txt
 # dotenv environment variables file
 .env
 
+# Node.js/Tailwind build artifacts
+src/Taskboard.Server/node_modules/
+src/Taskboard.Server/wwwroot/css/tailwind.css
+src/Taskboard.Server/package-lock.json
+
 # Local runtime data
 .data/
 

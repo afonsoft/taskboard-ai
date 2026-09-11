@@ -1,10 +1,13 @@
 using System.Security.Cryptography;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 
 namespace Taskboard.Server.Services;
 
 /// <summary>
-/// Representa o usuário administrador carregado das configurações do servidor.
+/// Representa o usuário administrador carregado do arquivo <c>admin.json</c>
+/// ou, quando não existe, a partir das configurações/variáveis de ambiente.
 /// </summary>
 public sealed class AdminUser
 {
@@ -12,19 +15,19 @@ public sealed class AdminUser
     public string Username { get; }
 
     /// <summary>Hash da senha gerado pelo <see cref="PasswordHasher{TUser}"/>.</summary>
-    public string PasswordHash { get; }
+    public string PasswordHash { get; private set; }
 
-    /// <summary>Caminho do arquivo onde a senha em texto plano foi persistida, quando gerada automaticamente.</summary>
-    public string? PasswordFilePath { get; }
+    /// <summary>Caminho do arquivo <c>admin.json</c>.</summary>
+    public string? AdminFilePath { get; }
 
     /// <summary>
     /// Cria uma nova instância de <see cref="AdminUser"/>.
     /// </summary>
-    public AdminUser(string username, string passwordHash, string? passwordFilePath = null)
+    public AdminUser(string username, string passwordHash, string? adminFilePath = null)
     {
         Username = username;
         PasswordHash = passwordHash;
-        PasswordFilePath = passwordFilePath;
+        AdminFilePath = adminFilePath;
     }
 
     /// <summary>
@@ -42,11 +45,50 @@ public sealed class AdminUser
     }
 
     /// <summary>
-    /// Carrega as credenciais do administrador a partir da configuração ou variáveis de ambiente,
-    /// gerando uma senha aleatória quando nenhuma for fornecida.
+    /// Altera a senha do administrador e persiste o novo hash em <c>admin.json</c>.
+    /// </summary>
+    public void ChangePassword(string newPassword)
+    {
+        if (string.IsNullOrWhiteSpace(newPassword))
+        {
+            throw new ArgumentException("New password cannot be empty.", nameof(newPassword));
+        }
+
+        var hasher = new PasswordHasher<AdminUser>();
+        PasswordHash = hasher.HashPassword(this, newPassword);
+
+        if (!string.IsNullOrEmpty(AdminFilePath))
+        {
+            Save(AdminFilePath);
+        }
+    }
+
+    /// <summary>
+    /// Carrega as credenciais do administrador a partir do <c>admin.json</c>,
+    /// ou semente do arquivo de configuração/variável de ambiente, persistindo o hash.
     /// </summary>
     public static AdminUser CreateFromConfiguration(IConfiguration configuration, string dataDirectory)
     {
+        Directory.CreateDirectory(dataDirectory);
+        var adminFilePath = Path.Combine(dataDirectory, "admin.json");
+
+        if (File.Exists(adminFilePath))
+        {
+            try
+            {
+                var content = File.ReadAllText(adminFilePath);
+                var data = JsonSerializer.Deserialize<AdminData>(content);
+                if (!string.IsNullOrWhiteSpace(data?.Username) && !string.IsNullOrWhiteSpace(data?.PasswordHash))
+                {
+                    return new AdminUser(data.Username, data.PasswordHash, adminFilePath);
+                }
+            }
+            catch (JsonException)
+            {
+                // corrupted file; fall back to seed and recreate
+            }
+        }
+
         var username = configuration["Admin:Username"]
                        ?? Environment.GetEnvironmentVariable("TASKBOARD_ADMIN_USERNAME")
                        ?? "admin";
@@ -54,26 +96,48 @@ public sealed class AdminUser
         var password = configuration["Admin:Password"]
                        ?? Environment.GetEnvironmentVariable("TASKBOARD_ADMIN_PASSWORD");
 
-        string? passwordFilePath = null;
+        string? legacyPasswordFilePath = null;
 
         if (string.IsNullOrWhiteSpace(password))
         {
             password = GenerateRandomPassword();
-            Directory.CreateDirectory(dataDirectory);
-            passwordFilePath = Path.Combine(dataDirectory, ".admin-password");
-            File.WriteAllText(passwordFilePath, password);
+            legacyPasswordFilePath = Path.Combine(dataDirectory, ".admin-password");
+            File.WriteAllText(legacyPasswordFilePath, password);
 
-            Console.WriteLine($"[Taskboard] Admin password generated and saved to: {passwordFilePath}");
+            Console.WriteLine($"[Taskboard] Admin password generated and saved to: {legacyPasswordFilePath}");
 
             if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
             {
-                File.SetUnixFileMode(passwordFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                File.SetUnixFileMode(legacyPasswordFilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             }
         }
 
-        var user = new AdminUser(username, string.Empty, passwordFilePath);
-        var passwordHash = new PasswordHasher<AdminUser>().HashPassword(user, password);
-        return new AdminUser(username, passwordHash, passwordFilePath);
+        var user = new AdminUser(username, string.Empty, adminFilePath);
+        var hasher = new PasswordHasher<AdminUser>();
+        user.PasswordHash = hasher.HashPassword(user, password);
+        user.Save(adminFilePath);
+
+        return user;
+    }
+
+    /// <summary>
+    /// Persiste as credenciais no arquivo <c>admin.json</c> com permissões restritas.
+    /// </summary>
+    public void Save(string path)
+    {
+        var data = new AdminData(Username, PasswordHash);
+        var options = new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
+        var json = JsonSerializer.Serialize(data, options);
+        File.WriteAllText(path, json);
+
+        if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+        {
+            File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     private static string GenerateRandomPassword()
@@ -81,4 +145,6 @@ public sealed class AdminUser
         var bytes = RandomNumberGenerator.GetBytes(32);
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    private sealed record AdminData(string Username, string PasswordHash);
 }

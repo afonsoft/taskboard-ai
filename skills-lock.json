@@ -5,121 +5,121 @@
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/building-mcp-servers/SKILL.md",
-      "computedHash": "793f6a6a2990e8293424edec68048ef33d52e21b36ee3b8c33effc4286fa1c07"
+      "computedHash": "67ad7e7c9d1e8e0fd88c0552dd91e4a5846c65b63f7efe86400d64d5b4d52e1e"
     },
     "code-review-and-quality": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/code-review-and-quality/SKILL.md",
-      "computedHash": "71f767a0d9178b4715804d516e60c94eea845704736b1883a2344b2591901db4"
+      "computedHash": "ac71d0dd3a1438f156376ebfbc4501e5af0d2b24e30b1b31ef69d4b806e8d785"
     },
     "composio-mcp": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/composio-mcp/SKILL.md",
-      "computedHash": "50122b6601a474d8a203aa2629a779e46c01cff4c8606559e4766c3ffe0f0561"
+      "computedHash": "cf151e543d68052ac8a7bdfc05aa65ea90356fc41533a8d226484bbfe9b4dbf7"
     },
     "create-agent-harness": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/create-agent-harness/SKILL.md",
-      "computedHash": "2109d6fb41829d3f34f58be3d5f883962b2fccbbb4f0b2a5e8d11775ae77ceae"
+      "computedHash": "339896a0711cb36ff18e4e179df7f198c7fe4cd1f73afb43ddc1ea9c3b36eb99"
     },
     "create-issues": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/create-issues/SKILL.md",
-      "computedHash": "4ab4cef4b2203b2d8aa7ba03f127aaf68b1a34cc1806f4a819748553935cf9b0"
+      "computedHash": "8db20c820037a04d6914cb185120b8e4814b817a08ef965b40ec5a1fd227dd33"
     },
     "create-readme": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/create-readme/SKILL.md",
-      "computedHash": "9b143edba4739f2400b5561a4b9f0374c4e1aba9f8582becd61028118ac3c633"
+      "computedHash": "b5cef5c9439b89881fece4c12ef660e923635ad7f537f369c834db9d5a682838"
     },
     "diagnose": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/diagnose/SKILL.md",
-      "computedHash": "1e7faaa1286c5c31b147585e9d493a62e0eb601910df30b9718489b45d3e2063"
+      "computedHash": "b5f6f6f272f26802ef223f22a27e37de965d3b4b150997ca9a6e9aff6996949b"
     },
     "drawio-architecture": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/drawio-architecture/SKILL.md",
-      "computedHash": "e83496cfa43d38647c6ed1b47f79e776771fed86850957a823b0d60537e78a4a"
+      "computedHash": "cc904124f8d8080312ce1c9ee959223b8748cbfd69b0e1fda8b7c4f74d0bc920"
     },
     "execute-tdd-spec": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/execute-tdd-spec/SKILL.md",
-      "computedHash": "703a80f0d550a9b832eb3ee1c755d434772a9470ba150a872c1c0a9bd9d275e5"
+      "computedHash": "b15ddab1d962d23966b53fe15b554c93b0b4d358115607a61ec232016843f6ba"
     },
     "grill-me-with-spec": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/grill-me-with-spec/SKILL.md",
-      "computedHash": "d8a71212c519d6e34bb7560d5eef0cf33d3bd53539ee59f7fe9de251826155d7"
+      "computedHash": "6dcf8b745d2600fad387ba85f7651987a787e9e85d94558a105e09b8c39beaa0"
     },
     "improve-codebase-architecture": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/improve-codebase-architecture/SKILL.md",
-      "computedHash": "48cc9425c9257e156ff335a06293a9994ebc3f44fa0c8879b1e3bbfd67a86b9b"
+      "computedHash": "e057dc17aa4b848f9376d563745a20111fd3df12f88fb71ec1eb41ea68c75d30"
     },
     "notebooklm-mcp": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/notebooklm-mcp/SKILL.md",
-      "computedHash": "5d9beb465e6e53a8e5d9326db1d6f32fb6f2600c6964a4fd62a7d027581637af"
+      "computedHash": "cd99fe4bffe962a72e83c521da0acf0178d172e49762cb06325784a04041a6e3"
     },
     "observability-and-instrumentation": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/observability-and-instrumentation/SKILL.md",
-      "computedHash": "2aa12ca2c75875c29ca542a8dbbe2339a94ccb13ba0fd8247c5d4b9f5d1bbfaa"
+      "computedHash": "4d063626d203ed9035edcec8de974dbb9ebbae2c996e512582ac9f286e90854e"
     },
     "obsidian": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/obsidian/SKILL.md",
-      "computedHash": "7583d0898dd071202ac3c3ff007ea681cd5aa831aa09c7fa399b6bd6193705d3"
+      "computedHash": "10768b8fd1ea80eb3877b5e2cda74a08aa24933dc33ca5043c5e15bc5a28f4de"
     },
     "orchestrator": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/orchestrator/SKILL.md",
-      "computedHash": "a35e3b772a1327d70e248427217d3ff8725eb189e0d6353866983526012b3434"
+      "computedHash": "c33812f2a6d8ac791528c663ac53057545cf680d2bedda8e2626bd09fc231d4d"
     },
     "qa-analyst": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/qa-analyst/SKILL.md",
-      "computedHash": "603692b5b95a5fc2889c0755663112d7a3513332aceba563d18fe09932207d0a"
+      "computedHash": "ad2d5f5024ccfc44e0a2632942ac3b43d57da16dcf4f841edc8eed34a0dc299a"
     },
     "quality-test-implementation": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/quality-test-implementation/SKILL.md",
-      "computedHash": "2e3d4d56ddccb692cc87d1c05dac2140aae0f78e3c6ac8ab7de98e8c92f20102"
+      "computedHash": "8a7952699f05c4f74c8ee400c3a63ba42091fa78f2b7a027a7b9553c6e81c56e"
     },
     "scaffold-mvp": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/scaffold-mvp/SKILL.md",
-      "computedHash": "29fa6067d072aa151fc767b5c69d9a8120eaf075ddc1d8d6d417ce74da8d50bb"
+      "computedHash": "4f73c1e616e97f566d6f8a1cc0bb562ecadda0d1a43fe6db7111273ab27f2e4b"
     },
     "sonarqube-autofix": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/sonarqube-autofix/SKILL.md",
-      "computedHash": "0fc9d306143ed83cff3da0bd20f3f32ee420c8bc726d58f68e311829b568d894"
+      "computedHash": "aa4c0cd44f39b3b5d801b5ec4cdd0961549bfd0aa7927c77d1d1f61454864c5c"
     },
     "wordpress-mcp": {
       "source": "afonsoft/skills",
       "sourceType": "github",
       "skillPath": "skills/wordpress-mcp/SKILL.md",
-      "computedHash": "2ead82e4cf7ec1ba0823157b4972297c879b36219207eeddcf62b60d33cc33e4"
+      "computedHash": "c568c797db4bd1d225c4a8e2d79702f64593fb4f140e9839e230b3616094c799"
     }
   }
 }

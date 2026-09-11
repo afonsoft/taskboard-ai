@@ -28,6 +28,39 @@ public class AgentOrchestrationServiceTests
     }
 
     [Fact]
+    public async Task Dado_UmaRequisicao_Quando_Enfileirar_Entao_PersisteLogNoRepositorio()
+    {
+        var logRepository = Substitute.For<IAgentLogRepository>();
+        var service = CriarService(agentLogRepository: logRepository);
+        var request = CriarRequest();
+
+        await service.EnqueueAsync(request);
+
+        await logRepository.Received(1).AppendAsync(
+            Arg.Is<AgentLogMessage>(log => log.IssueId == request.IssueId && log.Stream == AgentLogStream.System),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Dado_HistoricoPersistido_Quando_SemExecucaoEmMemoria_Entao_RetornaDoRepositorio()
+    {
+        var issueId = "issue-persisted";
+        var expected = new AgentLogMessage(
+            DateTimeOffset.UtcNow,
+            issueId,
+            AgentLogStream.System,
+            "persisted log");
+        var logRepository = Substitute.For<IAgentLogRepository>();
+        logRepository.GetByIssueIdAsync(issueId, Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<AgentLogMessage>>([expected]));
+        var service = CriarService(agentLogRepository: logRepository);
+
+        var logs = await service.GetLogsAsync(issueId);
+
+        logs.ShouldHaveSingleItem().ShouldBe(expected);
+    }
+
+    [Fact]
     public async Task Dado_AgentesDescobertos_Quando_ConsultarDisponibilidade_Entao_MapeiaResultadoSemAlterarStatus()
     {
         var discoveryService = Substitute.For<IAgentDiscoveryService>();
@@ -153,11 +186,13 @@ public class AgentOrchestrationServiceTests
         IAgentAcpClient? acpClient = null,
         IAgentDiscoveryService? discoveryService = null,
         IAgentLogBroadcaster? logBroadcaster = null,
+        IAgentLogRepository? agentLogRepository = null,
         IGitHubService? gitHubService = null)
         => new(
             acpClient ?? Substitute.For<IAgentAcpClient>(),
             discoveryService ?? Substitute.For<IAgentDiscoveryService>(),
             logBroadcaster ?? Substitute.For<IAgentLogBroadcaster>(),
+            agentLogRepository ?? Substitute.For<IAgentLogRepository>(),
             gitHubService ?? Substitute.For<IGitHubService>());
 
     private static AgentExecutionRequest CriarRequest()

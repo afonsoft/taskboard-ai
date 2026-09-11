@@ -1,7 +1,8 @@
 @page "/"
 @inject TaskboardClient Client
 
-<h1>Board</h1>
+<h1 class="mb-2 text-2xl font-bold text-text">Board</h1>
+<p class="mb-6 text-sm text-text-muted">Drag or browse tasks by status</p>
 
 @if (_isLoading)
 {
@@ -9,7 +10,7 @@
 }
 else if (_errorMessage is not null)
 {
-    <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+    <div class="alert">@_errorMessage</div>
 }
 else if (_project is null)
 {
@@ -17,12 +18,15 @@ else if (_project is null)
 }
 else
 {
-    <div class="board">
+    <div class="kanban-board">
         @foreach (var status in _statuses)
         {
-            <div class="column">
-                <h3>@status</h3>
-                <div style="height: 600px; overflow-y: auto;">
+            <div class="kanban-column">
+                <div class="kanban-column-header">
+                    <h2 class="text-sm font-semibold capitalize text-text">@status</h2>
+                    <span class="kanban-label">@GetTasks(status).Count()</span>
+                </div>
+                <div class="kanban-column-body" style="max-height: 70vh;">
                     @if (GetTasks(status).Any())
                     {
                         <Virtualize Items="GetTasks(status).ToList()" ItemSize="80" OverscanCount="5">
@@ -36,9 +40,12 @@ else
                 </div>
             </div>
         }
-        <div class="column">
-            <h3>archived</h3>
-            <div style="height: 600px; overflow-y: auto;">
+        <div class="kanban-column">
+            <div class="kanban-column-header">
+                <h2 class="text-sm font-semibold capitalize text-text">archived</h2>
+                <span class="kanban-label">@_tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).Count()</span>
+            </div>
+            <div class="kanban-column-body" style="max-height: 70vh;">
                 @{
                     var archived = _tasks.Where(t => t.ArchivedAt is not null).OrderBy(t => t.SortOrder).ToList();
                 }

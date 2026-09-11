@@ -2,31 +2,23 @@
 
 <PageTitle>Login - Taskboard</PageTitle>
 
-<div class="d-flex align-center justify-center" style="min-height: 70vh;">
-    <MudCard Elevation="4" Style="width: 360px;">
-        <MudCardHeader>
-            <CardHeaderContent>
-                <MudText Typo="Typo.h4" Align="Align.Center">Taskboard</MudText>
-            </CardHeaderContent>
-        </MudCardHeader>
-        <MudCardContent>
-            <form method="post" action="/api/login" class="d-flex flex-column gap-4">
-                <div>
-                    <MudText Typo="Typo.body2">Username</MudText>
-                    <input type="text" name="Username" required autofocus style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
-                </div>
-                <div>
-                    <MudText Typo="Typo.body2">Password</MudText>
-                    <input type="password" name="Password" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
-                </div>
-                <input type="hidden" name="ReturnUrl" value="/" />
-                <MudButton ButtonType="ButtonType.Submit" 
-                           Variant="Variant.Filled" 
-                           Color="Color.Primary" 
-                           FullWidth="true">
-                    Sign in
-                </MudButton>
-            </form>
-        </MudCardContent>
-    </MudCard>
+<div class="flex min-h-[80vh] items-center justify-center">
+    <div class="card w-full max-w-sm">
+        <div class="mb-6 text-center">
+            <h1 class="text-2xl font-bold text-text">Taskboard</h1>
+            <p class="mt-1 text-sm text-text-muted">Sign in to continue</p>
+        </div>
+        <form method="post" action="/api/login" class="space-y-4">
+            <div>
+                <label for="username" class="mb-1 block text-sm font-medium text-text">Username</label>
+                <input id="username" type="text" name="Username" required autofocus class="input" placeholder="user" />
+            </div>
+            <div>
+                <label for="password" class="mb-1 block text-sm font-medium text-text">Password</label>
+                <input id="password" type="password" name="Password" required class="input" placeholder="••••••••" />
+            </div>
+            <input type="hidden" name="ReturnUrl" value="/" />
+            <button type="submit" class="btn-primary w-full">Sign in</button>
+        </form>
+    </div>
 </div>

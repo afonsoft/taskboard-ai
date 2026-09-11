@@ -126,7 +126,11 @@ builder.Services.AddResponseCompression(options =>
         "image/svg+xml"
     ];
 });
-builder.Services.AddOutputCache();
+builder.Services.AddOutputCache(options =>
+{
+    options.AddPolicy("ReadOnlyApi", p => p.Expire(TimeSpan.FromSeconds(60)));
+    options.AddPolicy("StaticAssets", p => p.Expire(TimeSpan.FromDays(1)));
+});
 builder.Services.AddRateLimiter(options =>
 {
     options.AddFixedWindowLimiter("login", policy =>
@@ -241,7 +245,7 @@ api.MapPost("logout", async (HttpContext context) =>
     context.Response.Redirect("/login");
 }).DisableAntiforgery();
 
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/health").CacheOutput("ReadOnlyApi");
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("data") || registration.Tags.Contains("db")
@@ -251,7 +255,8 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
     Predicate = registration => registration.Tags.Contains("live")
 });
 
-api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }));
+api.MapGet("/meta", () => Results.Ok(new { name = "taskboard", version = "1.0.0", realtime = new { transport = "poll", intervalMs = 2000 } }))
+   .CacheOutput("ReadOnlyApi");
 
 api.MapGet("/client-storage", () => Results.Ok(new { data = (string?)null }));
 api.MapPut("/client-storage", (object? _) => Results.NoContent());

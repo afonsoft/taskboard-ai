@@ -11,7 +11,7 @@
 - **repositorio**: `afonsoft/taskboard-ai`
 - **branch_trabalho**: `update/skills-lock`
 - **framework**: `afonsoft/skills` instalado via `npx skills add afonsoft/skills` (ver `skills-lock.json`)
-- **framework_update_check**: `Unable to check framework updates` (diretório de skills não é um repositório git; catalog local a partir de `skills-lock.json`)
+- **framework_update_check**: `up-to-date` (commit `8f22b4bc` em `/home/ubuntu/repos/skills`)
 
 ---
 
@@ -43,9 +43,9 @@
 | `docs/architecture/` | ✅ |
 | `docs/agents/` | ➖ N/A (não requerido pelo `CLAUDE.md` do projeto) |
 | Skills instaladas (`.claude/skills`) | ✅ |
-| Skills instaladas (`.devin/skills`) | ❌ `.devin/` não existe no repo |
-| Skills instaladas (`.agent/skills`) | ❌ `.agent/` não existe no repo |
-| `.devin/config.json` | ❌ `.devin/` não existe |
+| Skills instaladas (`.devin/skills`) | ✅ (symlink para `.claude/skills`) |
+| Skills instaladas (`.agent/skills`) | ✅ (symlink para `.claude/skills`) |
+| `.devin/config.json` | ✅ |
 
 ---
 
@@ -53,11 +53,11 @@
 
 | # | ID | Dimensão | Severidade | Descritivo | Tier Risco | Status |
 |---|----|----------|------------|------------|------------|--------|
-| 1 | `GAP-001` | CI/CD | P2 | Workflow `dotnet.yml` sem cache NuGet, sem `concurrency`, sem `permissions` mínimas, sem SonarCloud, sem CodeQL/Dependabot | T2 Batchável (workflows protegidos — requer aprovação humana) | 🟡 queued |
+| 1 | `GAP-001` | CI/CD | P2 | Workflow `dotnet.yml` com cache NuGet, `concurrency`, `permissions`, SonarCloud, CodeQL e Dependabot | T2 Batchável | 🟢 done |
 | 2 | `GAP-002` | Documentação | P4 | Docs não cobriam Kanban GitHub nem orquestração de agentes | T1 Auto | 🟢 done |
-| 3 | `GAP-003` | Arquitetura | P3 | Logs de agentes apenas em memória (perdidos em restart) | T2 Batchável | 🟡 queued |
-| 4 | `GAP-004` | Arquitetura | P3 | Transporte ACP atual é stdin/stdout de linha; JSON-RPC não implementado | T2 Batchável | 🟡 queued |
-| 7 | `GAP-007` | Arquitetura | P2 | `.devin/` e `.agent/` ausentes; `skills-lock.json` existe, mas a configuração Devin CLI e os skills Antigravity não estão no workspace | T2 Batchável | 🟡 queued |
+| 3 | `GAP-003` | Arquitetura | P3 | `AgentLogMessage` persistido em SQLite com EF Core | T2 Batchável | 🟢 done |
+| 4 | `GAP-004` | Arquitetura | P3 | Adapter ACP JSON-RPC sobre stdin/stdout | T2 Batchável | 🟢 done |
+| 7 | `GAP-007` | Arquitetura | P2 | `.devin/` e `.agent/` presentes com symlinks para `.claude/skills` e `config.json` | T2 Batchável | 🟢 done |
 
 ---
 
@@ -208,5 +208,12 @@ As specs aprovadas nesta sessão foram registradas para execução:
 - Adicionada EF Core migration `AddAgentLogs` para entidade `AgentLog`.
 - Atualizado `.claude/skills/orchestrator/SKILL.md` com afonsoft/skills.
 - Commits aplicados na branch `update/skills-lock`.
+
+### Ações da Fase 7 (reavaliação)
+
+- Reconciliadas issues #38, #39, #40 e #41 abertas no GitHub; verificado que o conteúdo já estava implementado no commit `0759c81`.
+- Fechadas issues #38 a #41 com comentário em português e referência ao commit de implementação.
+- `dotnet build` e `dotnet test` mantidos verdes (89 unit + 9 integration).
+- Estado do orquestrador atualizado para refletir GAPs concluídos e `.devin`/`.agent` presentes.
 
 **Status**: fluxo concluído sem gaps pendentes.

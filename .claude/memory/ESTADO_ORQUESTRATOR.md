@@ -7,9 +7,9 @@
 ## Sessão
 
 - **iniciado_em**: `2026-09-10 13:40:00`
-- **fase_atual**: `Fase 4`
+- **fase_atual**: `Fase 5`
 - **repositorio**: `afonsoft/taskboard-ai`
-- **branch_trabalho**: `feature/agent-orchestration`
+- **branch_trabalho**: `devin/spec-20260910-ui-login-settings-skills`
 - **framework**: `afonsoft/skills` instalado via `npx skills add afonsoft/skills` (ver `skills-lock.json`)
 
 ---
@@ -148,7 +148,8 @@ As specs aprovadas nesta sessão foram registradas para execução:
   issue_ref: "https://github.com/afonsoft/taskboard-ai/issues/24"
   spec_ref: ".specs/SPEC-20260910-ui-login-settings-skills.md"
   depends_on: []
-  status: in_progress
+  status: done
+  concluido_em: "2026-09-11"
 
 - id: TASK-007
   desc: "Implementar instalador CLI `install-cli.sh` em /usr/local/bin (SPEC-20260910-install-cli-sh)"
@@ -157,7 +158,8 @@ As specs aprovadas nesta sessão foram registradas para execução:
   issue_ref: "https://github.com/afonsoft/taskboard-ai/issues/25"
   spec_ref: ".specs/SPEC-20260910-install-cli-sh.md"
   depends_on: []
-  status: ready
+  status: done
+  concluido_em: "2026-09-11"
 ```
 
 ### Próximos passos

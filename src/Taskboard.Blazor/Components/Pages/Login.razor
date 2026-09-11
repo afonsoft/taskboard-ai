@@ -2,7 +2,7 @@
 
 <PageTitle>Login - Taskboard</PageTitle>
 
-<div class="d-flex align-center justify-center mud-height-full" style="min-height: 70vh;">
+<div class="d-flex align-center justify-center" style="min-height: 70vh;">
     <MudCard Elevation="4" Style="width: 360px;">
         <MudCardHeader>
             <CardHeaderContent>
@@ -11,18 +11,14 @@
         </MudCardHeader>
         <MudCardContent>
             <form method="post" action="/api/login" class="d-flex flex-column gap-4">
-                <MudTextField T="string" 
-                              Label="Username" 
-                              name="Username" 
-                              Required="true" 
-                              AutoFocus="true" 
-                              Variant="Variant.Outlined" />
-                <MudTextField T="string" 
-                              Label="Password" 
-                              name="Password" 
-                              InputType="InputType.Password" 
-                              Required="true" 
-                              Variant="Variant.Outlined" />
+                <div>
+                    <MudText Typo="Typo.body2">Username</MudText>
+                    <input type="text" name="Username" required autofocus style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
+                </div>
+                <div>
+                    <MudText Typo="Typo.body2">Password</MudText>
+                    <input type="password" name="Password" required style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--mud-palette-lines-default); background: var(--mud-palette-surface); color: var(--mud-palette-text-primary);" />
+                </div>
                 <input type="hidden" name="ReturnUrl" value="/" />
                 <MudButton ButtonType="ButtonType.Submit" 
                            Variant="Variant.Filled" 

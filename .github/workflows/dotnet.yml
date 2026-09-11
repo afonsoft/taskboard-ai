@@ -51,17 +51,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Setup .NET (global.json)
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 
       - name: Cache NuGet packages
-        uses: actions/cache@v6
+        uses: actions/cache@v4
         with:
           path: ~/.nuget/packages
           key: nuget-${{ runner.os }}-${{ hashFiles('Directory.Packages.props', '**/*.csproj', 'global.json') }}
@@ -104,7 +104,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: test-results
           retention-days: 14
@@ -115,7 +115,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
-        uses: codecov/codecov-action@v7
+        uses: codecov/codecov-action@v4
         with:
           files: TestResults/CoverageReport/Cobertura.xml
           fail_ci_if_error: false
@@ -126,12 +126,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
+    permissions:
+      contents: read
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       - name: Setup .NET (global.json)
-        uses: actions/setup-dotnet@v6
+        uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
 

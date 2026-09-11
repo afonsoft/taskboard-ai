@@ -22,6 +22,7 @@ using Taskboard.Dtos;
 using Taskboard.Blazor;
 using Taskboard.Blazor.Services;
 using Taskboard.EntityFrameworkCore;
+using Taskboard.EntityFrameworkCore.Agents;
 using Taskboard.EntityFrameworkCore.Data;
 using Taskboard.Integrations.Agents;
 using Taskboard.Integrations.Execution;
@@ -109,9 +110,10 @@ builder.Services.AddSingleton<ISkillDiscoveryService>(sp => new SkillDiscoverySe
     new SkillDiscoverySource("taskboard", Path.Join(Directory.GetCurrentDirectory(), "skills"))
 }));
 builder.Services.AddScoped<SettingsService>();
-builder.Services.AddSingleton<IAgentAcpClient, LocalCliAgentAcpClient>();
+builder.Services.AddSingleton<IAgentAcpClient, JsonRpcAcpClient>();
 builder.Services.AddSingleton<IAgentAdapter, KnownCliAgentAdapter>();
 builder.Services.AddSingleton<IAgentLogBroadcaster, SignalRAgentLogBroadcaster>();
+builder.Services.AddScoped<IAgentLogRepository, EfCoreAgentLogRepository>();
 builder.Services.AddSingleton<IAgentOrchestrationService, AgentOrchestrationService>();
 builder.Services.AddHostedService(sp => (AgentOrchestrationService)sp.GetRequiredService<IAgentOrchestrationService>());
 

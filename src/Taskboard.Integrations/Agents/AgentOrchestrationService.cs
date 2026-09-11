@@ -14,6 +14,7 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
     private readonly IAgentAcpClient _acpClient;
     private readonly IAgentDiscoveryService _discoveryService;
     private readonly IAgentLogBroadcaster _logBroadcaster;
+    private readonly IAgentLogRepository _agentLogRepository;
     private readonly IGitHubService _gitHubService;
     private readonly Channel<AgentExecutionRequest> _channel = Channel.CreateUnbounded<AgentExecutionRequest>();
     private readonly ConcurrentDictionary<string, RunningJob> _running = new();
@@ -23,11 +24,13 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
         IAgentAcpClient acpClient,
         IAgentDiscoveryService discoveryService,
         IAgentLogBroadcaster logBroadcaster,
+        IAgentLogRepository agentLogRepository,
         IGitHubService gitHubService)
     {
         _acpClient = acpClient;
         _discoveryService = discoveryService;
         _logBroadcaster = logBroadcaster;
+        _agentLogRepository = agentLogRepository;
         _gitHubService = gitHubService;
     }
 
@@ -65,13 +68,18 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
         return Task.CompletedTask;
     }
 
-    public Task<IReadOnlyList<AgentLogMessage>> GetLogsAsync(string issueId, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<AgentLogMessage>> GetLogsAsync(string issueId, CancellationToken cancellationToken = default)
     {
-        var list = _logs.GetValueOrDefault(issueId) ?? [];
-        lock (list)
+        var list = _logs.GetValueOrDefault(issueId);
+        if (list is not null && list.Count > 0)
         {
-            return Task.FromResult<IReadOnlyList<AgentLogMessage>>(list.ToList().AsReadOnly());
+            lock (list)
+            {
+                return list.ToList().AsReadOnly();
+            }
         }
+
+        return await _agentLogRepository.GetByIssueIdAsync(issueId, cancellationToken);
     }
 
     public Task CancelAsync(string issueId, CancellationToken cancellationToken = default)
@@ -154,6 +162,7 @@ public sealed class AgentOrchestrationService : BackgroundService, IAgentOrchest
             list.Add(message);
         }
 
+        _ = _agentLogRepository.AppendAsync(message);
         _ = _logBroadcaster.BroadcastAsync(message);
     }
 

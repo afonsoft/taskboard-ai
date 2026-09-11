@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Taskboard.Domain.Agents;
 using Taskboard.Domain.Entities;
 
 namespace Taskboard.EntityFrameworkCore.Data;
@@ -25,6 +26,7 @@ public sealed class TaskboardDbContext : DbContext
     public DbSet<AiChatEvent> AiChatEvents => Set<AiChatEvent>();
     public DbSet<UserPreference> UserPreferences => Set<UserPreference>();
     public DbSet<AgentPreference> AgentPreferences => Set<AgentPreference>();
+    public DbSet<AgentLog> AgentLogs => Set<AgentLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,48 +1,58 @@
 @inherits LayoutComponentBase
 @inject IHttpContextAccessor HttpContextAccessor
 @inject TaskboardClient Client
+@inject IJSRuntime JS
 
 <MudThemeProvider @bind-IsDarkMode="_isDarkMode" />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<div class="page">
-    <div class="sidebar">
+<div class="flex h-screen w-full">
+    <aside class="flex w-60 flex-col border-r border-border bg-surface">
+        <div class="flex h-16 items-center border-b border-border px-5">
+            <span class="text-xl font-bold tracking-tight text-text">Taskboard</span>
+        </div>
         <NavMenu />
-    </div>
-
-    <main>
-        <div class="top-row px-4">
-            <MudIconButton
-                Icon="@(_isDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)"
-                Color="Color.Inherit"
-                aria-label="toggle theme"
-                OnClick="ToggleTheme" />
-            <MudIconButton
-                Icon="@Icons.Material.Filled.Settings"
-                Color="Color.Inherit"
-                Href="/settings"
-                aria-label="settings" />
-            <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
+    </aside>
+    <div class="flex min-w-0 flex-1 flex-col">
+        <header class="flex h-16 items-center justify-end gap-3 border-b border-border bg-surface px-5">
+            <button type="button"
+                    class="btn-secondary p-2"
+                    aria-label="toggle theme"
+                    @onclick="ToggleTheme">
+                @if (_isDarkMode)
+                {
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+                }
+                else
+                {
+                    <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364-.707-.707M6.343 6.343l-.707-.707m12.728 0-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                }
+            </button>
+            <a href="/settings" class="btn-secondary p-2" aria-label="settings">
+                <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.5 6h9.75M10.5 6a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm0 0H3.75m6.75 6h10.5m-10.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm0 0H3.75m6.75 6h10.5m-10.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm0 0H3.75"/></svg>
+            </a>
+            <a href="https://github.com/afonsoft/taskboard-ai" target="_blank" class="text-sm text-text-muted">About</a>
             @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
             {
-                <form method="post" action="/api/logout" class="logout-form" aria-label="logout">
-                    <button type="submit">Log out</button>
+                <form method="post" action="/api/logout" class="m-0" aria-label="logout">
+                    <button type="submit" class="btn-secondary">Log out</button>
                 </form>
             }
-        </div>
-
-        <article class="content px-4">
+        </header>
+        <main class="flex-1 overflow-auto p-6">
             <ErrorBoundary>
                 <ChildContent>
                     @Body
                 </ChildContent>
                 <ErrorContent>
-                    <MudAlert Severity="Severity.Error" Class="mb-4">An unexpected error occurred. Please refresh the page.</MudAlert>
+                    <div class="alert">
+                        An unexpected error occurred. Please refresh the page.
+                    </div>
                 </ErrorContent>
             </ErrorBoundary>
-        </article>
-    </main>
+        </main>
+    </div>
 </div>
 
 @code {
@@ -55,14 +65,30 @@
             var settings = await Client.GetSettingsAsync();
             _isDarkMode = settings.Theme != "light";
         }
-        catch (HttpRequestException)
+        catch (Exception)
         {
             _isDarkMode = true;
         }
     }
 
-    private void ToggleTheme()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await ApplyThemeAsync();
+        }
+    }
+
+    private async Task ToggleTheme()
     {
         _isDarkMode = !_isDarkMode;
+        await ApplyThemeAsync();
+    }
+
+    private async Task ApplyThemeAsync()
+    {
+        var theme = _isDarkMode ? "dark" : "light";
+        await JS.InvokeVoidAsync("document.documentElement.setAttribute", "data-theme", theme);
+        await JS.InvokeVoidAsync("document.documentElement.classList.toggle", "dark", _isDarkMode);
     }
 }

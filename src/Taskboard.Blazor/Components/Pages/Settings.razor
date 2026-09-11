@@ -6,45 +6,62 @@
 
 <PageTitle>Settings - Taskboard</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Settings</MudText>
+<h1 class="mb-2 text-2xl font-bold text-text">Settings</h1>
+<p class="mb-6 text-sm text-text-muted">Customize your workspace and agents</p>
 
-<MudCard>
-    <MudCardContent>
-        <MudForm>
-            <MudSwitch T="bool" Value="_isDark" ValueChanged="OnThemeChanged" Label="Dark mode" Color="Color.Primary" />
-            <MudTextField T="string" @bind-Value="_gitHubToken" Label="GitHub token" InputType="InputType.Password" Class="mt-2" />
-        </MudForm>
-    </MudCardContent>
-</MudCard>
+<div class="card mb-6">
+    <h2 class="mb-4 text-lg font-semibold text-text">Preferences</h2>
+    <div class="space-y-4">
+        <label class="flex items-center gap-3">
+            <input type="checkbox" class="checkbox" @bind="_isDark" />
+            <span class="text-sm text-text">Dark mode</span>
+        </label>
+        <div>
+            <label for="github-token" class="mb-1 block text-sm font-medium text-text">GitHub token</label>
+            <input id="github-token" type="password" class="input" @bind="_gitHubToken" placeholder="ghp_***" />
+        </div>
+    </div>
+</div>
 
-<MudCard Class="mt-4">
-    <MudCardHeader>
-        <CardHeaderContent>
-            <MudText Typo="Typo.h6">Agents</MudText>
-        </CardHeaderContent>
-    </MudCardHeader>
-    <MudCardContent>
-        <MudTable Items="_agents" Breakpoint="Breakpoint.Sm" Loading="_loading" LoadingProgressColor="Color.Primary">
-            <HeaderContent>
-                <MudTh>Name</MudTh>
-                <MudTh>Version</MudTh>
-                <MudTh>Enabled</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Name">@context.Name</MudTd>
-                <MudTd DataLabel="Version">@context.Version</MudTd>
-                <MudTd DataLabel="Enabled">
-                    <MudSwitch T="bool" Value="_enabled.Contains(context.Type)" ValueChanged="v => ToggleAgent(context.Type, v)" Color="Color.Primary" />
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText>No agents discovered.</MudText>
-            </NoRecordsContent>
-        </MudTable>
-    </MudCardContent>
-</MudCard>
+<div class="card mb-6">
+    <h2 class="mb-4 text-lg font-semibold text-text">Agents</h2>
+    @if (_loading)
+    {
+        <Loading Message="Loading agents..." />
+    }
+    else if (!_agents.Any())
+    {
+        <EmptyState Message="No agents discovered." />
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Version</th>
+                        <th>Enabled</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var agent in _agents)
+                    {
+                        <tr>
+                            <td>@agent.Name</td>
+                            <td class="text-text-muted">@agent.Version</td>
+                            <td>
+                                <input type="checkbox" class="checkbox" checked="@_enabled.Contains(agent.Type)" @onchange="e => ToggleAgent(agent.Type, (bool)e.Value!)" />
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
 
-<MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-4" OnClick="SaveAsync">Save</MudButton>
+<button type="button" class="btn-primary" @onclick="SaveAsync">Save settings</button>
 
 @code {
     private bool _isDark = true;
@@ -62,8 +79,6 @@
         _enabled = new HashSet<AgentType>(settings.Agents.Where(a => a.Enabled).Select(a => a.Type));
         _loading = false;
     }
-
-    private void OnThemeChanged(bool value) => _isDark = value;
 
     private void ToggleAgent(AgentType type, bool enabled)
     {

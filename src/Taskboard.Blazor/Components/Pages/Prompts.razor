@@ -1,0 +1,90 @@
+@page "/prompts/{source}/{name}"
+@attribute [Authorize]
+@inject TaskboardClient Client
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Prompt - @(_skill?.Name ?? "...") - Taskboard</PageTitle>
+
+<h1 class="mb-2 text-2xl font-bold text-text">Prompt library</h1>
+<p class="mb-6 text-sm text-text-muted">Copy a skill prompt to use in your agent.</p>
+
+@if (_skill is null)
+{
+    if (_notFound)
+    {
+        <EmptyState Message="Skill not found." />
+    }
+    else
+    {
+        <Loading Message="Loading prompt..." />
+    }
+}
+else
+{
+    <div class="card">
+        <div class="mb-4 flex items-start justify-between gap-4">
+            <div>
+                <h2 class="text-2xl font-bold text-text">@_skill.Name</h2>
+                <p class="text-sm text-text-muted">@_skill.Description</p>
+            </div>
+            <button type="button" class="btn-primary shrink-0" @onclick="CopyToClipboardAsync">Copy prompt</button>
+        </div>
+
+        @if (_skill.Tools.Any())
+        {
+            <div class="mb-6 flex flex-wrap gap-2">
+                @foreach (var tool in _skill.Tools)
+                {
+                    <span class="badge">@tool</span>
+                }
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_skill.References))
+        {
+            <div class="mb-6">
+                <h3 class="mb-2 text-lg font-semibold text-text">References</h3>
+                <pre class="code-block">@_skill.References</pre>
+            </div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_skill.Scripts))
+        {
+            <div class="mb-6">
+                <h3 class="mb-2 text-lg font-semibold text-text">Scripts</h3>
+                <pre class="code-block">@_skill.Scripts</pre>
+            </div>
+        }
+
+        <div>
+            <h3 class="mb-2 text-lg font-semibold text-text">Full content</h3>
+            <pre class="code-block">@_skill.Content</pre>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Source { get; set; } = default!;
+    [Parameter] public string Name { get; set; } = default!;
+
+    private SkillDetailDto? _skill;
+    private bool _notFound;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _skill = await Client.GetSkillDetailAsync(Source, Name);
+        _notFound = _skill is null;
+    }
+
+    private async Task CopyToClipboardAsync()
+    {
+        if (_skill is null)
+        {
+            return;
+        }
+
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _skill.Content);
+        Snackbar.Add("Prompt copied to clipboard", Severity.Success);
+    }
+}

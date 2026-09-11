@@ -4,38 +4,64 @@
 
 <PageTitle>Skills - Taskboard</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Skills</MudText>
+<h1 class="mb-2 text-2xl font-bold text-text">Skills</h1>
+<p class="mb-6 text-sm text-text-muted">Installed agent skills</p>
 
-<MudTable Items="_skills" Loading="_loading" LoadingProgressColor="Color.Primary" Filter="Filter">
-    <ToolBarContent>
-        <MudText Typo="Typo.h6">Available skills</MudText>
-        <MudSpacer />
-        <MudTextField T="string" @bind-Value="_search" Placeholder="Search" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" />
-    </ToolBarContent>
-    <HeaderContent>
-        <MudTh>Name</MudTh>
-        <MudTh>Source</MudTh>
-        <MudTh>Description</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd DataLabel="Name">@context.Name</MudTd>
-        <MudTd DataLabel="Source">@context.Source</MudTd>
-        <MudTd DataLabel="Description">@context.Description</MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No skills found.</MudText>
-    </NoRecordsContent>
-</MudTable>
+<div class="card">
+    <div class="mb-4 flex items-center gap-3">
+        <input type="search" class="input max-w-md" placeholder="Search skills..." value="@_search" @oninput="OnSearchInput" />
+    </div>
+    @if (_loading)
+    {
+        <Loading Message="Loading skills..." />
+    }
+    else if (!_filteredSkills.Any())
+    {
+        <EmptyState Message="No skills found." />
+    }
+    else
+    {
+        <div class="overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Source</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var skill in _filteredSkills)
+                    {
+                        <tr>
+                            <td class="font-medium text-text">@skill.Name</td>
+                            <td class="text-text-muted">@skill.Source</td>
+                            <td class="text-text-muted">@skill.Description</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
 
 @code {
     private bool _loading = true;
     private string _search = string.Empty;
     private IReadOnlyList<SkillDto> _skills = [];
+    private IReadOnlyList<SkillDto> _filteredSkills = [];
 
     protected override async Task OnInitializedAsync()
     {
         _skills = await Client.GetSkillsAsync();
+        _filteredSkills = _skills;
         _loading = false;
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? string.Empty;
+        _filteredSkills = _skills.Where(Filter).ToList();
     }
 
     private bool Filter(SkillDto skill)

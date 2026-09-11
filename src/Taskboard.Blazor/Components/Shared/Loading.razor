@@ -1,0 +1,7 @@
+<MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-4" />
+<MudText Typo="Typo.body1" Align="Align.Center">@Message</MudText>
+
+@code {
+    [Parameter]
+    public string Message { get; set; } = "Loading...";
+}

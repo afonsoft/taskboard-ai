@@ -1,37 +1,57 @@
 using System;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace Taskboard.Application.Contracts.Configuration;
 
 /// <summary>
-/// Resolves taskboard environment variables.
+/// Resolves taskboard environment values from configuration and environment variables.
 /// </summary>
 /// <remarks>
-/// This class intentionally does not fall back to legacy <c>CODEX_TASKBOARD_*</c>
-/// variables. Use the new <c>TASKBOARD_*</c> names only.
+/// This class is no longer static so it can be tested with mock configuration.
 /// </remarks>
-public static class TaskboardEnvironment
+public sealed class TaskboardEnvironment
 {
-    private const string DefaultPort = "47823";
+    private const int DefaultPort = 47823;
     private const string DefaultDataDirName = ".data";
+
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _hostEnvironment;
+
+    public TaskboardEnvironment(IConfiguration configuration, IHostEnvironment hostEnvironment)
+    {
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        _hostEnvironment = hostEnvironment ?? throw new ArgumentNullException(nameof(hostEnvironment));
+    }
 
     /// <summary>
     /// Returns the configured taskboard port. Defaults to <c>47823</c>.
     /// </summary>
-    public static string GetPort()
+    public int GetPort()
     {
-        return GetTrimmedOrDefault("TASKBOARD_PORT", DefaultPort);
+        var configured = _configuration["Taskboard:Port"]
+                         ?? GetTrimmedOrDefault("TASKBOARD_PORT", string.Empty);
+
+        if (int.TryParse(configured, out var port))
+        {
+            return port;
+        }
+
+        return DefaultPort;
     }
 
     /// <summary>
     /// Returns the configured taskboard data directory. Defaults to
-    /// <c>{basePath}/.data</c>.
+    /// <c>{contentRoot}/.data</c>.
     /// </summary>
-    public static string GetDataDir(string basePath)
+    public string GetDataDir()
     {
-        var configured = GetTrimmedOrDefault("TASKBOARD_DATA_DIR", string.Empty);
+        var configured = _configuration["Taskboard:DataDir"]
+                         ?? GetTrimmedOrDefault("TASKBOARD_DATA_DIR", string.Empty);
+
         if (string.IsNullOrEmpty(configured))
         {
-            return System.IO.Path.Combine(basePath, DefaultDataDirName);
+            return System.IO.Path.Combine(_hostEnvironment.ContentRootPath, DefaultDataDirName);
         }
 
         return configured;
@@ -39,9 +59,9 @@ public static class TaskboardEnvironment
 
     /// <summary>
     /// Returns the server URLs. <c>ASPNETCORE_URLS</c> takes precedence;
-    /// otherwise falls back to <c>http://127.0.0.1:{TASKBOARD_PORT}</c>.
+    /// otherwise falls back to <c>http://127.0.0.1:{Taskboard:Port}</c>.
     /// </summary>
-    public static string GetServerUrls()
+    public string GetServerUrls()
     {
         var aspNetCoreUrls = GetTrimmedOrDefault("ASPNETCORE_URLS", string.Empty);
         if (!string.IsNullOrEmpty(aspNetCoreUrls))

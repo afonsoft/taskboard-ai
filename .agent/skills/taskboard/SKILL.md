@@ -1,1 +1,0 @@
-../../../.claude/skills/taskboard/SKILL.md

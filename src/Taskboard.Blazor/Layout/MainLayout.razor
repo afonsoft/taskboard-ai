@@ -13,21 +13,34 @@
 
     <main>
         <div class="top-row px-4">
-            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)"
-                           Color="Color.Inherit"
-                           Href="/settings"
-                           aria-label="settings" />
+            <MudIconButton
+                Icon="@(_isDarkMode ? Icons.Material.Filled.DarkMode : Icons.Material.Filled.LightMode)"
+                Color="Color.Inherit"
+                aria-label="toggle theme"
+                OnClick="ToggleTheme" />
+            <MudIconButton
+                Icon="@Icons.Material.Filled.Settings"
+                Color="Color.Inherit"
+                Href="/settings"
+                aria-label="settings" />
             <a href="https://github.com/afonsoft/taskboard-ai" target="_blank">About</a>
             @if (HttpContextAccessor.HttpContext?.User.Identity?.IsAuthenticated == true)
             {
-                <form method="post" action="/api/logout" class="logout-form">
-                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" Color="Color.Inherit">Log out</MudButton>
+                <form method="post" action="/api/logout" class="logout-form" aria-label="logout">
+                    <button type="submit">Log out</button>
                 </form>
             }
         </div>
 
         <article class="content px-4">
-            @Body
+            <ErrorBoundary>
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent>
+                    <MudAlert Severity="Severity.Error" Class="mb-4">An unexpected error occurred. Please refresh the page.</MudAlert>
+                </ErrorContent>
+            </ErrorBoundary>
         </article>
     </main>
 </div>
@@ -46,5 +59,10 @@
         {
             _isDarkMode = true;
         }
+    }
+
+    private void ToggleTheme()
+    {
+        _isDarkMode = !_isDarkMode;
     }
 }

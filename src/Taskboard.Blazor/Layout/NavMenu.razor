@@ -1,23 +1,23 @@
-<div class="top-row ps-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark" aria-label="main navigation">
     <div class="container-fluid">
         <a class="navbar-brand" href="">Taskboard</a>
     </div>
 </div>
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="flex-column">
+    <nav class="flex-column" role="navigation" aria-label="sidebar navigation">
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All" aria-label="Board">
                 <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Board
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="ai-chat">
+            <NavLink class="nav-link" href="ai-chat" aria-label="AI Chat">
                 <span class="bi bi-chat-fill-nav-menu" aria-hidden="true"></span> AI Chat
             </NavLink>
         </div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="github-board">
+            <NavLink class="nav-link" href="github-board" aria-label="GitHub Board">
                 <span class="bi bi-github-nav-menu" aria-hidden="true"></span> GitHub Board
             </NavLink>
         </div>

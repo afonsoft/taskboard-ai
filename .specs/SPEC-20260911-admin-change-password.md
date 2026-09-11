@@ -11,7 +11,7 @@
 | Repository | afonsoft/taskboard-ai |
 | Suggested branch | `feature/devin-20260911-admin-change-password` |
 | Technical owner | afonsoft |
-| Status | Draft |
+| Status | Approved |
 | Date | 2026-09-11 |
 | Target agent | Devin |
 

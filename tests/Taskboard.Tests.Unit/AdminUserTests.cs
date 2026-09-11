@@ -1,0 +1,83 @@
+using System;
+using System.IO;
+using Microsoft.Extensions.Configuration;
+using Shouldly;
+using Xunit;
+using Taskboard.Server.Services;
+
+namespace Taskboard.Tests.Unit;
+
+public class AdminUserTests : IDisposable
+{
+    private readonly string _dataDir;
+
+    public AdminUserTests()
+    {
+        _dataDir = Path.Combine(Path.GetTempPath(), $"taskboard-admin-test-{Guid.NewGuid():n}");
+        Directory.CreateDirectory(_dataDir);
+
+        Environment.SetEnvironmentVariable("TASKBOARD_ADMIN_USERNAME", "admin");
+        Environment.SetEnvironmentVariable("TASKBOARD_ADMIN_PASSWORD", "Test123!");
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_dataDir))
+        {
+            Directory.Delete(_dataDir, recursive: true);
+        }
+
+        Environment.SetEnvironmentVariable("TASKBOARD_ADMIN_USERNAME", null);
+        Environment.SetEnvironmentVariable("TASKBOARD_ADMIN_PASSWORD", null);
+    }
+
+    [Fact]
+    public void Given_NoAdminFile_When_CreateFromConfiguration_Then_SeedsAndPersists()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var user = AdminUser.CreateFromConfiguration(configuration, _dataDir);
+
+        user.Username.ShouldBe("admin");
+        user.Validate("Test123!").ShouldBeTrue();
+        File.Exists(Path.Combine(_dataDir, "admin.json")).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Given_AdminFile_When_Load_Then_DoesNotReseed()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var user = AdminUser.CreateFromConfiguration(configuration, _dataDir);
+        user.ChangePassword("New123!");
+
+        var reloaded = AdminUser.CreateFromConfiguration(configuration, _dataDir);
+
+        reloaded.Username.ShouldBe("admin");
+        reloaded.Validate("New123!").ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Given_AdminUser_When_ChangePassword_Then_NewPasswordValidAndPersisted()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var user = AdminUser.CreateFromConfiguration(configuration, _dataDir);
+
+        user.ChangePassword("New123!");
+
+        user.Validate("New123!").ShouldBeTrue();
+        user.Validate("Test123!").ShouldBeFalse();
+        var persisted = File.ReadAllText(Path.Combine(_dataDir, "admin.json"));
+        persisted.ShouldContain(user.PasswordHash);
+    }
+
+    [Fact]
+    public void Given_AdminUser_When_ValidateEmpty_Then_False()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var user = AdminUser.CreateFromConfiguration(configuration, _dataDir);
+
+        user.Validate("").ShouldBeFalse();
+        user.Validate(null).ShouldBeFalse();
+    }
+}

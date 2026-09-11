@@ -288,6 +288,22 @@ api.MapPost("logout", async (HttpContext context) =>
     context.Response.Redirect("/login");
 }).DisableAntiforgery();
 
+api.MapPut("admin/password", (ChangePasswordRequest request, AdminUser admin) =>
+{
+    if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+    {
+        return Results.BadRequest("Current and new passwords are required.");
+    }
+
+    if (!admin.Validate(request.CurrentPassword))
+    {
+        return Results.Unauthorized();
+    }
+
+    admin.ChangePassword(request.NewPassword);
+    return Results.NoContent();
+}).RequireAuthorization();
+
 app.MapHealthChecks("/health").CacheOutput("ReadOnlyApi");
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {

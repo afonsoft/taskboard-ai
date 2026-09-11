@@ -24,6 +24,29 @@
 </div>
 
 <div class="card mb-6">
+    <h2 class="mb-4 text-lg font-semibold text-text">Change password</h2>
+    <div class="space-y-4">
+        <div>
+            <label for="current-password" class="mb-1 block text-sm font-medium text-text">Current password</label>
+            <input id="current-password" type="password" class="input" @bind="_currentPassword" />
+        </div>
+        <div>
+            <label for="new-password" class="mb-1 block text-sm font-medium text-text">New password</label>
+            <input id="new-password" type="password" class="input" @bind="_newPassword" />
+        </div>
+        <div>
+            <label for="confirm-password" class="mb-1 block text-sm font-medium text-text">Confirm new password</label>
+            <input id="confirm-password" type="password" class="input" @bind="_confirmPassword" />
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_passwordError))
+        {
+            <p class="text-sm text-danger">@_passwordError</p>
+        }
+        <button type="button" class="btn-secondary" @onclick="ChangePasswordAsync">Change password</button>
+    </div>
+</div>
+
+<div class="card mb-6">
     <h2 class="mb-4 text-lg font-semibold text-text">Agents</h2>
     @if (_loading)
     {
@@ -70,6 +93,11 @@
     private IReadOnlyList<AgentPreferenceDto> _agents = [];
     private HashSet<AgentType> _enabled = new();
 
+    private string _currentPassword = string.Empty;
+    private string _newPassword = string.Empty;
+    private string _confirmPassword = string.Empty;
+    private string? _passwordError;
+
     protected override async Task OnInitializedAsync()
     {
         var settings = await Client.GetSettingsAsync();
@@ -89,6 +117,34 @@
         else
         {
             _enabled.Remove(type);
+        }
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        _passwordError = null;
+
+        if (string.IsNullOrWhiteSpace(_currentPassword) || string.IsNullOrWhiteSpace(_newPassword) || string.IsNullOrWhiteSpace(_confirmPassword))
+        {
+            _passwordError = "All fields are required.";
+            return;
+        }
+
+        if (!string.Equals(_newPassword, _confirmPassword, StringComparison.Ordinal))
+        {
+            _passwordError = "New passwords do not match.";
+            return;
+        }
+
+        try
+        {
+            await Client.ChangePasswordAsync(new ChangePasswordRequest(_currentPassword, _newPassword));
+            Snackbar.Add("Password changed", Severity.Success);
+            _currentPassword = _newPassword = _confirmPassword = string.Empty;
+        }
+        catch (HttpRequestException)
+        {
+            _passwordError = "Current password is incorrect.";
         }
     }
 

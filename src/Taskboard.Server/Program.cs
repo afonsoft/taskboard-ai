@@ -976,6 +976,7 @@ app.Use(async (context, next) =>
 
     if (path.StartsWith("/api/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/_framework/", StringComparison.OrdinalIgnoreCase)
+        || path.StartsWith("/_content/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
         || path.StartsWith("/img/", StringComparison.OrdinalIgnoreCase)

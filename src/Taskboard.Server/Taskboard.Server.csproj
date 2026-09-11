@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Swashbuckle.AspNetCore" />
+    <Content Include="wwwroot/css/tailwind.css" CopyToOutputDirectory="PreserveNewest" Condition="Exists('wwwroot/css/tailwind.css')" />
     <Content Include="../../skills/**/*" CopyToOutputDirectory="PreserveNewest" Link="skills/%(RecursiveDir)%(Filename)%(Extension)" />
     <ProjectReference Include="../Taskboard.Application/Taskboard.Application.csproj" />
     <ProjectReference Include="../Taskboard.EntityFrameworkCore/Taskboard.EntityFrameworkCore.csproj" />
@@ -12,4 +13,8 @@
     <ProjectReference Include="../Taskboard.Integrations/Taskboard.Integrations.csproj" />
     <ProjectReference Include="../Taskboard.Blazor/Taskboard.Blazor.csproj" />
   </ItemGroup>
+  <Target Name="BuildTailwindCss" BeforeTargets="Build">
+    <Exec Command="npm install" WorkingDirectory="$(MSBuildProjectDirectory)" Condition="!Exists('$(MSBuildProjectDirectory)/node_modules/.package-lock.json')" />
+    <Exec Command="npm run build:css" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 </Project>

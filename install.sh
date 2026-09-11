@@ -254,6 +254,7 @@ create_env_file() {
 # Ambiente gerado por install.sh do taskboard-ai
 export PATH="$BIN_DIR:\$PATH"
 export TASKBOARD_DATA_DIR="$data_dir"
+export Taskboard__DataDir="$data_dir"
 export TASKBOARD_ADMIN_USERNAME="admin"
 export TASKBOARD_ADMIN_PASSWORD="$password"
 export TASKBOARD_URL="http://127.0.0.1:47823"
@@ -302,6 +303,41 @@ EOF
     run chmod +x "$BIN_DIR/taskboard-mcp"
 }
 
+create_systemd_service() {
+    if ! command -v systemctl &> /dev/null; then
+        echo "systemctl nao encontrado; pulando criacao do servico."
+        return 0
+    fi
+
+    local unit_dir="$HOME/.config/systemd/user"
+    local unit_file="$unit_dir/taskboard-server.service"
+
+    echo "Criando servico systemd para o servidor taskboard..."
+
+    write_file "$unit_file" <<EOF
+[Unit]
+Description=Taskboard AI Web Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=$BIN_DIR/taskboard-server
+Restart=on-failure
+RestartSec=5s
+Environment="TASKBOARD_HOME=$TASKBOARD_HOME"
+Environment="HOME=$HOME"
+
+[Install]
+WantedBy=default.target
+EOF
+
+    if [ "$DRY_RUN" = false ]; then
+        run systemctl --user daemon-reload || true
+        run systemctl --user enable taskboard-server || true
+        run systemctl --user start taskboard-server || true
+    fi
+}
+
 add_path_to_shell() {
     local shell_file=$1
     if [ ! -f "$shell_file" ]; then
@@ -340,6 +376,9 @@ Comandos disponiveis:
   taskboard-server
   taskboard-mcp
 
+Servico systemd:
+  systemctl --user status taskboard-server
+
 Para ativar o PATH neste shell, execute:
   source $env_file
 
@@ -363,6 +402,7 @@ main() {
     setup_config
     create_env_file
     create_wrappers
+    create_systemd_service
     add_path_to_shell "$HOME/.bashrc"
     if [ -f "$HOME/.zshrc" ]; then
         add_path_to_shell "$HOME/.zshrc"
